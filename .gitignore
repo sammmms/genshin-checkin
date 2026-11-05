@@ -1,0 +1,21 @@
+# Credentials & Local Configuration
+.env
+*.env
+config.env
+
+# Logs & Temporary files
+*.log
+*.sqlite
+.hoyo_import_tmp*
+
+# Python cache & virtualenvs
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# OS specific
+.DS_Store
+Thumbs.db

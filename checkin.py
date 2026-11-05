@@ -1,0 +1,799 @@
+#!/usr/bin/env python3
+"""
+HoYoLAB Easy Check-In & Helper Hub
+Supports: Windows, macOS, Linux
+Games: Honkai: Star Rail (HSR), Genshin Impact, and Zenless Zone Zero (ZZZ)
+Zero external dependencies for core functionality.
+"""
+
+import sys
+import os
+import json
+import time
+import random
+import shutil
+import sqlite3
+import platform
+import argparse
+import subprocess
+import urllib.request
+import urllib.error
+import urllib.parse
+from datetime import datetime
+from pathlib import Path
+
+# --- Game Definitions ---
+GAMES = {
+    "starrail": {
+        "name": "Honkai: Star Rail",
+        "emoji": "🚂",
+        "act_id": "e202303301540311",
+        "info_url": "https://sg-public-api.hoyolab.com/event/luna/os/info",
+        "sign_url": "https://sg-public-api.hoyolab.com/event/luna/os/sign",
+        "home_url": "https://sg-public-api.hoyolab.com/event/luna/os/home",
+        "referer": "https://act.hoyolab.com/bbs/event/signin/hkrpg/e202303301540311.html?act_id=e202303301540311",
+    },
+    "genshin": {
+        "name": "Genshin Impact",
+        "emoji": "✨",
+        "act_id": "e202102251931481",
+        "info_url": "https://sg-hk4e-api.hoyolab.com/event/sol/info",
+        "sign_url": "https://sg-hk4e-api.hoyolab.com/event/sol/sign",
+        "home_url": "https://sg-hk4e-api.hoyolab.com/event/sol/home",
+        "referer": "https://act.hoyolab.com/ys/event/signin-sea-v3/index.html?act_id=e202102251931481",
+    },
+    "zzz": {
+        "name": "Zenless Zone Zero",
+        "emoji": "🎬",
+        "act_id": "e202406031448091",
+        "info_url": "https://sg-act-nap-api.hoyolab.com/event/luna/zzz/os/info",
+        "sign_url": "https://sg-act-nap-api.hoyolab.com/event/luna/zzz/os/sign",
+        "home_url": "https://sg-act-nap-api.hoyolab.com/event/luna/zzz/os/home",
+        "referer": "https://act.hoyolab.com/bbs/event/signin/zzz/e202406031448091.html?act_id=e202406031448091",
+    },
+}
+
+BASE_HEADERS = {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Connection": "keep-alive",
+    "Content-Type": "application/json;charset=UTF-8",
+    "Origin": "https://act.hoyolab.com",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-site",
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+    ),
+    "x-rpc-app_version": "2.34.1",
+    "x-rpc-client_type": "4",
+}
+
+AWARDS_CACHE = {}
+ENV_PATH = Path.home() / ".hoyolab-checkin" / ".env"
+OS_NAME = platform.system()  # 'Darwin', 'Windows', 'Linux'
+
+
+# ==============================================================================
+# Configuration & Cookie Management
+# ==============================================================================
+
+def load_env_file(filepath: Path) -> dict:
+    """Parse key=value pairs from .env without external libraries."""
+    env = {}
+    if not filepath.is_file():
+        return env
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    key, val = line.split("=", 1)
+                    env[key.strip()] = val.strip().strip("'\"")
+    except Exception as e:
+        print(f"[!] Warning reading {filepath}: {e}")
+    return env
+
+
+def save_cookie_to_env(cookie_string: str, config_path: Path = None):
+    """Save cookie securely to .env file."""
+    target_path = config_path or ENV_PATH
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    lines = []
+    found = False
+
+    if target_path.exists():
+        with open(target_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip().startswith("HOYO_COOKIE="):
+                    lines.append(f'HOYO_COOKIE="{cookie_string}"\n')
+                    found = True
+                else:
+                    lines.append(line)
+
+    if not found:
+        lines.append(f'HOYO_COOKIE="{cookie_string}"\n')
+
+    with open(target_path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+    if OS_NAME != "Windows":
+        os.chmod(target_path, 0o600)
+    print(f"💾 Cookie saved to: {target_path}")
+
+
+def get_cookies_from_env_or_config(config_path: Path = None) -> tuple:
+    """Extract cookies from environment or config file."""
+    cookies = []
+    search_paths = [ENV_PATH, Path.home() / ".hoyolab" / "config.env", Path(".env")]
+    if config_path:
+        search_paths.insert(0, config_path)
+
+    loaded_vars = {}
+    for p in search_paths:
+        if p.is_file():
+            loaded_vars.update(load_env_file(p))
+            break
+
+    for k, v in os.environ.items():
+        if k.startswith("HOYO_") or k in ("COOKIE", "COOKIES", "LTOKEN_V2", "LTUID_V2"):
+            loaded_vars[k] = v
+
+    if "HOYO_COOKIE" in loaded_vars and loaded_vars["HOYO_COOKIE"]:
+        cookies.append(loaded_vars["HOYO_COOKIE"])
+    elif "COOKIE" in loaded_vars and loaded_vars["COOKIE"]:
+        cookies.append(loaded_vars["COOKIE"])
+
+    if not cookies and "LTOKEN_V2" in loaded_vars and "LTUID_V2" in loaded_vars:
+        token = loaded_vars["LTOKEN_V2"]
+        uid = loaded_vars["LTUID_V2"]
+        if token and uid:
+            cookies.append(f"ltuid_v2={uid}; ltoken_v2={token};")
+
+    for i in range(1, 10):
+        key = f"HOYO_COOKIE_{i}"
+        if key in loaded_vars and loaded_vars[key]:
+            if loaded_vars[key] not in cookies:
+                cookies.append(loaded_vars[key])
+
+    return cookies, loaded_vars
+
+
+# ==============================================================================
+# Cross-Platform Browser Auto-Import (Zen, Firefox, Floorp)
+# ==============================================================================
+
+def find_browser_cookie_db():
+    """Locate SQLite cookie databases from browsers across Windows, macOS, and Linux."""
+    candidates = []
+    home = Path.home()
+
+    if OS_NAME == "Darwin":
+        app_sup = home / "Library/Application Support"
+        candidates.extend([
+            ("Zen Browser", app_sup / "zen/Profiles"),
+            ("Mozilla Firefox", app_sup / "Firefox/Profiles"),
+            ("Floorp", app_sup / "Floorp/Profiles"),
+        ])
+    elif OS_NAME == "Windows":
+        appdata = Path(os.environ.get("APPDATA", ""))
+        candidates.extend([
+            ("Zen Browser", appdata / "zen/Profiles"),
+            ("Mozilla Firefox", appdata / "Mozilla/Firefox/Profiles"),
+            ("Floorp", appdata / "Floorp/Profiles"),
+        ])
+    elif OS_NAME == "Linux":
+        candidates.extend([
+            ("Zen Browser", home / ".zen"),
+            ("Mozilla Firefox", home / ".mozilla/firefox"),
+            ("Floorp", home / ".floorp"),
+        ])
+
+    found = []
+    for name, base_dir in candidates:
+        if base_dir.exists():
+            for db in base_dir.glob("*/cookies.sqlite"):
+                found.append((name, db))
+    return found
+
+
+def auto_import_from_browser(save: bool = True) -> str:
+    """Extract valid session cookies from user's active browser."""
+    databases = find_browser_cookie_db()
+    if not databases:
+        return None
+
+    for browser_name, db_path in databases:
+        if not db_path.exists():
+            continue
+
+        tmp_path = Path.home() / f".hoyo_import_tmp_{os.getpid()}.sqlite"
+        try:
+            shutil.copy2(db_path, tmp_path)
+            conn = sqlite3.connect(tmp_path)
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT name, value FROM moz_cookies 
+                WHERE (host LIKE '%hoyolab.com' OR host LIKE '%hoyoverse.com')
+                AND name IN ('ltoken_v2', 'ltuid_v2', 'account_id_v2', 'cookie_token_v2')
+            """)
+            cookies = dict(cur.fetchall())
+            conn.close()
+
+            ltoken = cookies.get("ltoken_v2")
+            ltuid = cookies.get("ltuid_v2") or cookies.get("account_id_v2")
+
+            if ltoken and ltuid:
+                cookie_str = f"ltuid_v2={ltuid}; ltoken_v2={ltoken};"
+                print(f"✨ Found active HoYoLAB session in {browser_name}!")
+                print(f"   👤 Account ID: {ltuid}")
+                if save:
+                    save_cookie_to_env(cookie_str)
+                return cookie_str
+        except Exception:
+            pass
+        finally:
+            if tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except Exception:
+                    pass
+    return None
+
+
+def interactive_browser_login():
+    """Launch interactive browser window for logging in."""
+    print("\n🌐 Launching interactive login window...")
+    print("👉 Please log in to HoYoLAB in the window that appears.")
+    print("👉 (Google, Apple, or Email + Password login are all supported).\n")
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("📦 Installing Playwright automation engine...")
+        cmd = [sys.executable, "-m", "pip", "install", "playwright"]
+        if OS_NAME != "Windows":
+            cmd.append("--break-system-packages")
+        subprocess.run(cmd, check=True)
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
+        from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)
+        context = browser.new_context()
+        page = context.new_page()
+
+        page.goto("https://act.hoyolab.com/ys/event/signin-sea-v3/index.html?act_id=e202102251931481")
+        print("⏳ Waiting for you to log in...")
+
+        captured_cookie = None
+        start_time = time.time()
+        while time.time() - start_time < 300:
+            cookies = context.cookies(["https://act.hoyolab.com", "https://hoyolab.com", "https://hoyoverse.com"])
+            cookie_dict = {c["name"]: c["value"] for c in cookies}
+
+            ltoken = cookie_dict.get("ltoken_v2")
+            ltuid = cookie_dict.get("ltuid_v2") or cookie_dict.get("account_id_v2")
+
+            if ltoken and ltuid:
+                captured_cookie = f"ltuid_v2={ltuid}; ltoken_v2={ltoken};"
+                print(f"\n🎉 Login detected for Account ID: {ltuid}!")
+                break
+            time.sleep(2)
+
+        browser.close()
+        if captured_cookie:
+            save_cookie_to_env(captured_cookie)
+            return captured_cookie
+        else:
+            print("❌ Login timed out or cancelled.")
+            return None
+
+
+# ==============================================================================
+# Cross-Platform Auto Check-In Scheduler (Windows / macOS / Linux)
+# ==============================================================================
+
+def get_scheduler_status():
+    """Check if automatic daily check-in is scheduled on the current OS."""
+    if OS_NAME == "Darwin":
+        agents_dir = Path.home() / "Library/LaunchAgents"
+        matched = list(agents_dir.glob("*hoyolab*.plist")) + list(agents_dir.glob("*genshin*.plist"))
+        if matched:
+            res = subprocess.run(["launchctl", "list"], capture_output=True, text=True)
+            if "hoyolab" in res.stdout or "genshin" in res.stdout:
+                return True, "macOS LaunchAgent (Active)"
+            return True, "macOS LaunchAgent (Loaded)"
+        return False, "Not Configured"
+
+    elif OS_NAME == "Windows":
+        res = subprocess.run(["schtasks", "/Query", "/TN", "HoYoLAB_Daily_Checkin"], capture_output=True, text=True)
+        if res.returncode == 0:
+            return True, "Windows Task Scheduler (Active)"
+        return False, "Not Configured"
+
+    elif OS_NAME == "Linux":
+        res = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
+        if "genshin-checkin" in res.stdout or "hoyolab-checkin" in res.stdout:
+            return True, "Linux Crontab (Active)"
+        return False, "Not Configured"
+
+    return False, "Unsupported OS"
+
+
+def install_scheduler():
+    """Install daily background check-in task at 08:00 AM."""
+    script_path = Path(__file__).resolve()
+    python_bin = sys.executable
+
+    if OS_NAME == "Darwin":
+        plist_path = Path.home() / "Library/LaunchAgents/com.user.hoyolab-checkin.plist"
+        plist_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path = Path.home() / ".hoyolab-checkin/checkin.log"
+
+        content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.user.hoyolab-checkin</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{python_bin}</string>
+        <string>{script_path}</string>
+        <string>--silent</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>{log_path}</string>
+    <key>StandardErrorPath</key>
+    <string>{log_path}</string>
+</dict>
+</plist>
+"""
+        with open(plist_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True)
+        subprocess.run(["launchctl", "load", str(plist_path)], check=True)
+        print("✅ Daily auto check-in registered at 08:00 AM via macOS LaunchAgent!")
+        print("ℹ️ Catches up automatically if MacBook was asleep.")
+        return True
+
+    elif OS_NAME == "Windows":
+        cmd = [
+            "schtasks", "/Create",
+            "/SC", "DAILY",
+            "/TN", "HoYoLAB_Daily_Checkin",
+            "/TR", f'"{python_bin}" "{script_path}" --silent',
+            "/ST", "08:00",
+            "/F"
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode == 0:
+            print("✅ Daily auto check-in registered at 08:00 AM in Windows Task Scheduler!")
+            return True
+        else:
+            print(f"❌ Failed to create Windows task: {res.stderr}")
+            return False
+
+    elif OS_NAME == "Linux":
+        res = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
+        existing = res.stdout if res.returncode == 0 else ""
+        filtered = [l for l in existing.splitlines() if "hoyolab-checkin" not in l and "genshin-checkin" not in l]
+        filtered.append(f"0 8 * * * {python_bin} {script_path} --silent >> ~/.hoyolab-checkin/checkin.log 2>&1")
+        new_cron = "\n".join(filtered) + "\n"
+
+        p = subprocess.Popen(["crontab", "-"], stdin=subprocess.PIPE, text=True)
+        p.communicate(input=new_cron)
+        print("✅ Daily auto check-in registered at 08:00 AM in Linux Crontab!")
+        return True
+
+    return False
+
+
+def remove_scheduler():
+    """Remove background daily task."""
+    if OS_NAME == "Darwin":
+        plist_path = Path.home() / "Library/LaunchAgents/com.user.hoyolab-checkin.plist"
+        if plist_path.exists():
+            subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True)
+            plist_path.unlink()
+        print("🗑️ Removed macOS LaunchAgent schedule.")
+        return True
+
+    elif OS_NAME == "Windows":
+        res = subprocess.run(["schtasks", "/Delete", "/TN", "HoYoLAB_Daily_Checkin", "/F"], capture_output=True, text=True)
+        print("🗑️ Removed Windows Task Scheduler entry.")
+        return True
+
+    elif OS_NAME == "Linux":
+        res = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
+        if res.returncode == 0:
+            filtered = [l for l in res.stdout.splitlines() if "hoyolab-checkin" not in l and "genshin-checkin" not in l]
+            new_cron = "\n".join(filtered) + "\n"
+            p = subprocess.Popen(["crontab", "-"], stdin=subprocess.PIPE, text=True)
+            p.communicate(input=new_cron)
+        print("🗑️ Removed Linux Crontab schedule.")
+        return True
+
+    return False
+
+
+# ==============================================================================
+# API Requests & Check-in Logic
+# ==============================================================================
+
+def request_json(url: str, method: str = "GET", headers: dict = None, body: dict = None, timeout: int = 15):
+    """Execute HTTP request and return parsed JSON."""
+    all_headers = dict(BASE_HEADERS)
+    if headers:
+        all_headers.update(headers)
+
+    data_bytes = json.dumps(body).encode("utf-8") if body is not None else None
+    req = urllib.request.Request(url, data=data_bytes, headers=all_headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        err_msg = e.read().decode("utf-8", errors="replace")
+        try:
+            return json.loads(err_msg)
+        except Exception:
+            return {"retcode": e.code, "message": f"HTTP {e.code}: {e.reason}"}
+    except Exception as e:
+        return {"retcode": -999, "message": str(e)}
+
+
+def fetch_awards(game_key: str):
+    """Fetch monthly awards catalog for the game."""
+    if game_key in AWARDS_CACHE:
+        return AWARDS_CACHE[game_key]
+
+    cfg = GAMES[game_key]
+    url = f"{cfg['home_url']}?lang=en-us&act_id={cfg['act_id']}"
+    res = request_json(url, method="GET", headers={"Referer": cfg["referer"]})
+    if res.get("retcode") == 0 and res.get("data") and "awards" in res["data"]:
+        AWARDS_CACHE[game_key] = res["data"]["awards"]
+        return AWARDS_CACHE[game_key]
+    return []
+
+
+def check_in_game(game_key: str, cookie: str, dry_run: bool = False, verbose: bool = True) -> dict:
+    """Execute status check and daily sign-in."""
+    cfg = GAMES[game_key]
+    headers = {"Referer": cfg["referer"], "Cookie": cookie}
+    act_id = cfg["act_id"]
+    query = f"lang=en-us&act_id={act_id}"
+    info_url = f"{cfg['info_url']}?{query}"
+    sign_url = f"{cfg['sign_url']}?{query}"
+
+    if verbose:
+        print(f"\n{cfg['emoji']} Checking {cfg['name']}...")
+
+    info_res = request_json(info_url, method="GET", headers=headers)
+    retcode = info_res.get("retcode")
+
+    if retcode == -100:
+        msg = "Cookie is invalid or expired."
+        if verbose:
+            print(f"  ❌ {msg}")
+        return {"game": cfg["name"], "success": False, "status": "AUTH_ERROR", "message": msg}
+
+    if retcode != 0:
+        err = info_res.get("message", "Unknown error")
+        if verbose:
+            print(f"  ❌ Error (code {retcode}): {err}")
+        return {"game": cfg["name"], "success": False, "status": "ERROR", "message": err}
+
+    data = info_res.get("data", {})
+    total_days = data.get("total_sign_day", 0)
+    is_signed = data.get("is_sign", False)
+    missed_days = data.get("sign_cnt_missed", 0)
+
+    awards = fetch_awards(game_key)
+
+    if is_signed:
+        award_text = ""
+        if awards and 0 <= (total_days - 1) < len(awards):
+            cur = awards[total_days - 1]
+            award_text = f" -> {cur.get('name')} x{cur.get('cnt')}"
+        msg = f"Already checked in today! (Day {total_days}{award_text})"
+        if verbose:
+            print(f"  📅 Streak: {total_days} day(s) this month (Missed: {missed_days})")
+            print(f"  ✅ {msg}")
+        return {
+            "game": cfg["name"],
+            "success": True,
+            "status": "ALREADY_CHECKED_IN",
+            "days": total_days,
+            "message": msg,
+        }
+
+    if dry_run:
+        msg = f"Not checked in yet today. Ready to claim Day {total_days + 1}."
+        if verbose:
+            print(f"  📅 Current streak: {total_days} day(s)")
+            print(f"  ℹ️  [Dry Run] {msg}")
+        return {"game": cfg["name"], "success": True, "status": "DRY_RUN", "message": msg}
+
+    # Execute POST
+    payload = {"act_id": act_id, "lang": "en-us"}
+    sign_res = request_json(sign_url, method="POST", headers=headers, body=payload)
+    sign_code = sign_res.get("retcode")
+
+    if sign_code == 0:
+        new_day = total_days + 1
+        award_text = ""
+        if awards and 0 <= (new_day - 1) < len(awards):
+            aw = awards[new_day - 1]
+            award_text = f" — Claimed: {aw.get('name')} x{aw.get('cnt')}"
+        msg = f"Check-in successful! Total days: {new_day}{award_text}"
+        if verbose:
+            print(f"  🎉 {msg}")
+        return {"game": cfg["name"], "success": True, "status": "SUCCESS", "days": new_day, "message": msg}
+
+    if sign_code == -5003:
+        msg = f"Already checked in today (Day {total_days})."
+        if verbose:
+            print(f"  ✅ {msg}")
+        return {"game": cfg["name"], "success": True, "status": "ALREADY_CHECKED_IN", "days": total_days, "message": msg}
+
+    err_msg = sign_res.get("message", "Unknown failure")
+    msg = f"Check-in failed (code {sign_code}): {err_msg}"
+    if verbose:
+        print(f"  ❌ {msg}")
+    return {"game": cfg["name"], "success": False, "status": "FAILED", "message": msg}
+
+
+def run_checkin_batch(cookies: list, games: list, dry_run: bool = False, verbose: bool = True) -> list:
+    """Run checkin across all accounts and games."""
+    all_results = []
+    for acc_idx, cookie in enumerate(cookies, 1):
+        if len(cookies) > 1 and verbose:
+            print(f"\n==================== Account #{acc_idx} ====================")
+        for g_idx, game_key in enumerate(games):
+            res = check_in_game(game_key, cookie, dry_run=dry_run, verbose=verbose)
+            all_results.append(res)
+            if g_idx < len(games) - 1:
+                time.sleep(random.uniform(2.0, 3.5))
+    return all_results
+
+
+# ==============================================================================
+# Interactive Terminal Hub (TUI)
+# ==============================================================================
+
+def check_account_status(cookie: str) -> dict:
+    """Quickly check account validity and game states without printing noise."""
+    status = {"valid": False, "uid": "Unknown", "games": {}}
+    for game_key in ["starrail", "genshin"]:
+        res = check_in_game(game_key, cookie, dry_run=True, verbose=False)
+        status["games"][game_key] = res
+        if res.get("status") != "AUTH_ERROR" and not status["valid"]:
+            status["valid"] = True
+
+    # Parse account uid from cookie string if possible
+    for item in cookie.split(";"):
+        if "=" in item:
+            k, v = item.strip().split("=", 1)
+            if k in ("ltuid_v2", "ltuid", "account_id_v2"):
+                status["uid"] = v
+                break
+    return status
+
+
+def menu_manage_scheduler():
+    """Interactive submenu to install or remove auto check-in."""
+    while True:
+        is_active, desc = get_scheduler_status()
+        print("\n" + "-" * 55)
+        print(f"⏰ Daily Auto Check-In Manager [{OS_NAME}]")
+        print("-" * 55)
+        print(f"Status: {'🟢' if is_active else '⚪'} {desc}")
+        print("\nOptions:")
+        print(" [1] ⏰ Enable / Install Daily Auto Check-In (Runs at 08:00 AM)")
+        print(" [2] 🗑️  Disable / Remove Auto Check-In")
+        print(" [0] 🔙 Back to Main Menu")
+        print("-" * 55)
+
+        choice = input("Select an option [0-2]: ").strip()
+        if choice == "1":
+            install_scheduler()
+        elif choice == "2":
+            remove_scheduler()
+        elif choice == "0":
+            break
+        else:
+            print("Invalid selection.")
+
+
+def menu_login_options():
+    """Interactive submenu for login."""
+    print("\n" + "-" * 55)
+    print("🔑 Login to HoYoLAB")
+    print("-" * 55)
+    print(" [1] ✨ Auto-Import from Browser (Zen / Firefox) [Instant]")
+    print(" [2] 🌐 Open Browser Window (Google / Apple / Email Login)")
+    print(" [3] ⌨️  Enter Cookie Manually")
+    print(" [0] 🔙 Cancel")
+    print("-" * 55)
+
+    choice = input("Select option [0-3]: ").strip()
+    if choice == "1":
+        cookie = auto_import_from_browser(save=True)
+        if cookie:
+            print("\n✅ Successfully imported and saved login credentials!")
+            return cookie
+        else:
+            print("[-] No active browser session found. Try option 2.")
+    elif choice == "2":
+        return interactive_browser_login()
+    elif choice == "3":
+        manual = input("\nPaste your cookie string (ltoken_v2=...; ltuid_v2=...): ").strip()
+        if manual:
+            save_cookie_to_env(manual)
+            print("✅ Cookie saved.")
+            return manual
+    return None
+
+
+def interactive_hub():
+    """Main interactive hub when running without arguments."""
+    while True:
+        cookies, _ = get_cookies_from_env_or_config()
+        cookie = cookies[0] if cookies else None
+
+        print("\n" + "=" * 58)
+        print("🎮  HoYoLAB Easy Check-In Hub (HSR & Genshin)")
+        print("=" * 58)
+
+        account_info = None
+        if cookie:
+            account_info = check_account_status(cookie)
+            if account_info["valid"]:
+                print(f"👤 Account ID:    {account_info['uid']}")
+                print("🔑 Token Status:  🟢 VALID (Active)")
+                print("📅 Today's Status:")
+                for gk, gres in account_info["games"].items():
+                    name = GAMES[gk]["name"]
+                    emoji = GAMES[gk]["emoji"]
+                    if gres.get("status") == "ALREADY_CHECKED_IN":
+                        print(f"   {emoji} {name:<19}: ✅ Checked In (Day {gres.get('days', 0)})")
+                    else:
+                        print(f"   {emoji} {name:<19}: 🟡 Ready to Claim!")
+            else:
+                print(f"👤 Account ID:    {account_info['uid']}")
+                print("🔑 Token Status:  🔴 EXPIRED or INVALID")
+        else:
+            print("👤 Account:       ⚪ Not Logged In")
+            print("🔑 Token Status:  ⚪ No Credentials Found")
+
+        is_sched, sched_desc = get_scheduler_status()
+        print(f"⏰ Auto Check-in:  {'🟢' if is_sched else '⚪'} {sched_desc}")
+        print("=" * 58)
+
+        # Dynamic Menu Options
+        if not cookie or (account_info and not account_info["valid"]):
+            print(" [1] 🔑 Login (Auto-import from browser or open login window)")
+            print(" [2] ⏰ Manage Auto Check-In Schedule")
+            print(" [0] 🚪 Exit")
+            print("=" * 58)
+
+            choice = input("Select an option: ").strip()
+            if choice == "1":
+                menu_login_options()
+            elif choice == "2":
+                menu_manage_scheduler()
+            elif choice == "0":
+                print("Goodbye! 👋")
+                sys.exit(0)
+        else:
+            print(" [1] 🚀 Check-in Now (Claim Today's Rewards)")
+            print(" [2] 🔍 View Streak & Rewards Catalog (Dry Run)")
+            print(" [3] ⏰ Manage Daily Auto Check-In (Windows / Mac / Linux)")
+            print(" [4] 🔄 Re-login / Switch Account")
+            print(" [0] 🚪 Exit")
+            print("=" * 58)
+
+            choice = input("Select an option [0-4]: ").strip()
+            if choice == "1":
+                run_checkin_batch([cookie], ["starrail", "genshin"], dry_run=False, verbose=True)
+                input("\nPress Enter to return to menu...")
+            elif choice == "2":
+                run_checkin_batch([cookie], ["starrail", "genshin"], dry_run=True, verbose=True)
+                input("\nPress Enter to return to menu...")
+            elif choice == "3":
+                menu_manage_scheduler()
+            elif choice == "4":
+                menu_login_options()
+            elif choice == "0":
+                print("Goodbye! 👋")
+                sys.exit(0)
+
+
+# ==============================================================================
+# CLI Entry Point
+# ==============================================================================
+
+def main():
+    parser = argparse.ArgumentParser(description="HoYoLAB Easy Check-In Hub")
+    parser.add_argument("--game", choices=["starrail", "genshin", "zzz", "all"], default="all")
+    parser.add_argument("--cookie", type=str, help="Direct cookie string override")
+    parser.add_argument("--config", type=str, help="Custom .env path")
+    parser.add_argument("--dry-run", action="store_true", help="Check status without claiming")
+    parser.add_argument("--silent", action="store_true", help="Run check-in silently (for scheduler/cron)")
+    parser.add_argument("--cron", action="store_true", help="Alias for --silent")
+    parser.add_argument("--login", action="store_true", help="Open login menu")
+    parser.add_argument("--import-browser", action="store_true", help="Auto-import from browser")
+    parser.add_argument("--login-browser", action="store_true", help="Open browser GUI login")
+    parser.add_argument("--install-schedule", action="store_true", help="Install auto daily check-in")
+    parser.add_argument("--remove-schedule", action="store_true", help="Remove auto daily check-in")
+
+    args = parser.parse_args()
+
+    # Direct CLI actions
+    if args.install_schedule:
+        install_scheduler()
+        sys.exit(0)
+
+    if args.remove_schedule:
+        remove_scheduler()
+        sys.exit(0)
+
+    if args.import_browser:
+        auto_import_from_browser(save=True)
+        sys.exit(0)
+
+    if args.login_browser:
+        interactive_browser_login()
+        sys.exit(0)
+
+    if args.login:
+        menu_login_options()
+        sys.exit(0)
+
+    # If launched with no args and connected to a terminal (interactive TTY):
+    if len(sys.argv) == 1 and sys.stdin.isatty():
+        interactive_hub()
+        return
+
+    # Non-interactive / CLI mode (cron, scheduler, or explicit flags)
+    config_path = Path(args.config) if args.config else None
+    cookies, loaded_vars = get_cookies_from_env_or_config(config_path)
+    if args.cookie:
+        cookies = [args.cookie]
+
+    if not cookies:
+        imported = auto_import_from_browser(save=True)
+        if imported:
+            cookies = [imported]
+        else:
+            print("❌ Error: No HoYoLAB credentials found! Run 'genshin-checkin' to log in.")
+            sys.exit(1)
+
+    games_to_run = ["starrail", "genshin"] if args.game == "all" else [args.game]
+    if args.game == "all" and loaded_vars.get("ENABLE_ZZZ", "").lower() in ("1", "true", "yes"):
+        games_to_run.append("zzz")
+
+    verbose = not (args.silent or args.cron)
+    if verbose:
+        print(f"🚀 HoYoLAB Check-In [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
+
+    results = run_checkin_batch(cookies, games_to_run, dry_run=args.dry_run, verbose=verbose)
+    success = all(r.get("success") for r in results)
+    sys.exit(0 if success else 1)
+
+
+if __name__ == "__main__":
+    main()

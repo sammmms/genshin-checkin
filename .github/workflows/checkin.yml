@@ -1,0 +1,26 @@
+name: HoYoLAB Daily Check-In
+
+on:
+  schedule:
+    # Runs everyday at 01:00 UTC (08:00 WIB / UTC+8)
+    - cron: '0 1 * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  checkin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run Daily Check-In
+        env:
+          HOYO_COOKIE: ${{ secrets.HOYO_COOKIE }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          python3 checkin.py
