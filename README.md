@@ -1,5 +1,9 @@
 # 🎮 genshin-checkin — HoYoLAB Easy Check-In Hub
 
+<p align="center">
+  <img src="assets/banner.png" alt="genshin-checkin Banner" width="100%" />
+</p>
+
 [![Python 3](https://img.shields.io/badge/Python-3.8+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)](#)
