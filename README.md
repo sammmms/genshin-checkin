@@ -1,26 +1,35 @@
-# 🎮 genshin-checkin — HoYoLAB Easy Check-In Hub
+# 🎮 hoyolab — HoYoLAB Easy Check-In Hub (All HoYoverse Games)
 
 <p align="center">
-  <img src="assets/banner.png" alt="genshin-checkin Banner" width="100%" />
+  <img src="assets/banner.png" alt="hoyolab Banner" width="100%" />
 </p>
 
 [![Python 3](https://img.shields.io/badge/Python-3.8+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)](#)
-[![Games](https://img.shields.io/badge/Games-HSR%20%7C%20Genshin%20%7C%20ZZZ-ff69b4?style=flat-square)](#)
+[![Games](https://img.shields.io/badge/Games-Genshin%20%7C%20HSR%20%7C%20ZZZ%20%7C%20HI3%20%7C%20ToT%20%7C%20HoYoLAB-ff69b4?style=flat-square)](#)
 
-A zero-dependency, cross-platform CLI hub and daily rewards check-in assistant for **Honkai: Star Rail**, **Genshin Impact**, and **Zenless Zone Zero**.
+A zero-dependency, cross-platform CLI hub and daily rewards check-in assistant for all **HoYoverse titles**: **Genshin Impact**, **Honkai: Star Rail**, **Zenless Zone Zero**, **Honkai Impact 3rd**, **Tears of Themis**, and **HoYoLAB Community**.
 
-Built around a simple philosophy: **"Let you check in easily."** No manual token hunting, no inspect element hassles, and optional background automation whenever you want it.
+Built around a simple philosophy: **"Let you check in easily."** No manual token hunting, no inspect element hassles, selective game toggling, in-app auto-updating, and optional background automation whenever you want it.
 
 ---
 
 ## 🌟 Features
 
 - **Zero Core Dependencies**: Runs purely on standard Python 3 (`urllib`, `sqlite3`, `json`). No `pip install` needed for core operations.
+- **Support for All 6 HoYoverse Titles**:
+  1. ✨ **Genshin Impact** (Primogems, Hero's Wit, Mora)
+  2. 🚂 **Honkai: Star Rail** (Stellar Jade, Traveler's Guide, Credits)
+  3. 🎬 **Zenless Zone Zero** (Polychromes, Official Investigator Logs, Dennies)
+  4. ⚔️ **Honkai Impact 3rd** (Crystals, Asterite, Coins)
+  5. ⚖️ **Tears of Themis** (S-Chips, Stellin, Oracle of Justice)
+  6. 💬 **HoYoLAB Community** (Daily attendance tasks)
+- **Granular Game Toggle Checklist**: Selectively enable or disable check-ins for each game individually. Only claim rewards for the games you actually play!
+- **In-App Auto-Updater**: Checks for new versions on startup via `wsnsam.my.id` / GitHub, displays release changelog, and provides a 1-click in-app update prompt (no need to reinstall!).
 - **One-Click Session Auto-Import**: Instantly detects and imports active HoYoLAB sessions from your desktop browser (**Zen Browser**, **Mozilla Firefox**, **Floorp**) in under 0.1 seconds.
 - **Interactive Browser Window**: Built-in visual login window for Google, Apple ID, and Email/Password logins without touching DevTools.
-- **Dynamic Terminal Dashboard**: Displays your account UID, token validity, today's claim progress, streak counts, and auto-scheduler status at a glance.
+- **Dynamic Terminal Dashboard**: Displays your account UID, token validity, today's claim progress across all active games, streak counts, and auto-scheduler status at a glance.
 - **Cross-Platform Daily Automation**:
   - **Windows**: Built-in 1-click **Windows Task Scheduler** integration (`schtasks`).
   - **macOS**: Built-in **LaunchAgent** (`launchd`) configuration that wakes up from sleep to claim rewards.
@@ -35,22 +44,28 @@ Built around a simple philosophy: **"Let you check in easily."** No manual token
 
 ```text
 ==========================================================
-🎮  HoYoLAB Easy Check-In Hub (HSR & Genshin)
+🎮  HoYoLAB Easy Check-In Hub (All Games)
 ==========================================================
 👤 Account ID:    24879236
 🔑 Token Status:  🟢 VALID (Active)
 📅 Today's Status:
-   🚂 Honkai: Star Rail  : ✅ Checked In (Day 1)
-   ✨ Genshin Impact     : ✅ Checked In (Day 1)
+   ✨ Genshin Impact     : ✅ Checked In (Day 5)
+   🚂 Honkai: Star Rail  : ✅ Checked In (Day 5)
+   🎬 Zenless Zone Zero  : 🟡 Ready to Claim!
+   ⚔️ Honkai Impact 3rd  : 🟡 Ready to Claim!
+   ⚖️ Tears of Themis    : 🟡 Ready to Claim!
+   💬 HoYoLAB Community  : 🟡 Ready to Claim!
 ⏰ Auto Check-in: 🟢 Active (macOS LaunchAgent / Windows Task)
 ==========================================================
  [1] 🚀 Check-in Now (Claim Today's Rewards)
  [2] 🔍 View Streak & Rewards Catalog (Dry Run)
- [3] ⏰ Manage Daily Auto Check-In (Windows / Mac / Linux)
- [4] 🔄 Re-login / Switch Account
+ [3] 🎮 Toggle Active Games (6/6 Active)
+ [4] ⏰ Manage Daily Auto Check-In (Windows / Mac / Linux)
+ [5] 🔄 Re-login / Switch Account
+ [6] 🔄 Check for Updates
  [0] 🚪 Exit
 ==========================================================
-Select an option [0-4]: 
+Select an option [0-6]: 
 ```
 
 ---
@@ -66,8 +81,9 @@ curl -sSL https://raw.githubusercontent.com/sammmms/genshin-checkin/main/install
 
 Then simply run:
 ```bash
-genshin-checkin
+hoyolab
 ```
+*(Alias `genshin-checkin` is also preserved).*
 
 ### 🪟 Windows
 

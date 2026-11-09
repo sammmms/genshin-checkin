@@ -1,0 +1,13 @@
+{
+  "app": "hoyolab",
+  "name": "HoYoLAB Easy Check-In Hub",
+  "version": "1.2.0",
+  "release_date": "2026-11-09",
+  "changelog": [
+    "🎮 Mendukung seluruh 6 judul game HoYoverse: Genshin Impact, Honkai: Star Rail, Zenless Zone Zero, Honkai Impact 3rd, Tears of Themis, HoYoLAB Community",
+    "⚙️ Fitur Game Toggle checklist: bebas aktifkan/nonaktifkan check-in untuk game tertentu",
+    "⚡ Perintah CLI resmi 'hoyolab' di samping alias 'genshin-checkin'",
+    "🔄 In-app auto-updater dengan progress check & 1-klik pasang update"
+  ],
+  "download_url": "https://raw.githubusercontent.com/sammmms/genshin-checkin/main/checkin.py"
+}

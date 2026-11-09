@@ -124,6 +124,104 @@ def save_hoyo_config(data: dict):
         json.dump(data, f, indent=2)
 
 
+APP_NAME = "hoyolab"
+APP_VERSION = "1.2.0"
+SCRIPT_PATH = Path(__file__).resolve()
+
+
+def parse_semver(ver: str) -> tuple:
+    parts = []
+    for x in ver.lstrip("v").split("."):
+        if x.isdigit():
+            parts.append(int(x))
+    return tuple(parts)
+
+
+def check_for_updates(prompt_if_latest: bool = False):
+    """
+    Checks latest update from https://wsnsam.my.id/api/updates?app=hoyolab
+    with fallback to raw.githubusercontent.com/sammmms/genshin-checkin/main/version.json.
+    """
+    sys.stdout.write("[*] Checking for updates... ")
+    sys.stdout.flush()
+
+    primary_url = f"https://wsnsam.my.id/api/updates?app={APP_NAME}"
+    fallback_url = "https://raw.githubusercontent.com/sammmms/genshin-checkin/main/version.json"
+
+    update_data = None
+    for url in [primary_url, fallback_url]:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (AutoUpdater)"})
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                if resp.status == 200:
+                    update_data = json.loads(resp.read().decode("utf-8"))
+                    break
+        except Exception:
+            continue
+
+    if not update_data or "version" not in update_data:
+        sys.stdout.write("\r[*] Checking for updates... [Skip / Offline]\n")
+        sys.stdout.flush()
+        time.sleep(0.3)
+        return
+
+    latest_ver = update_data["version"]
+    if parse_semver(latest_ver) <= parse_semver(APP_VERSION):
+        sys.stdout.write(f"\r[*] Checking for updates... [Latest Version: v{APP_VERSION} ✓]\n")
+        sys.stdout.flush()
+        time.sleep(0.4)
+        if prompt_if_latest:
+            print(f"\n[✓] You are already on the latest version (v{APP_VERSION}).\n")
+            input("Press Enter to continue...")
+        return
+
+    sys.stdout.write("\r" + " " * 60 + "\r")
+    sys.stdout.flush()
+
+    print("\n" + "=" * 62)
+    print(f"🚀 UPDATE AVAILABLE! (v{APP_VERSION} ➔ v{latest_ver})")
+    print(f"📅 Release: {update_data.get('release_date', 'New')}")
+    print("=" * 62)
+    print("📋 Changelog:")
+    for change in update_data.get("changelog", []):
+        print(f"  • {change}")
+    print("=" * 62 + "\n")
+
+    action = input(f"Install update v{latest_ver} now? [Y/n]: ").strip().lower()
+    if action in ("", "y", "yes"):
+        print(f"\n⬇️  Downloading update v{latest_ver}...")
+        download_url = update_data.get("download_url")
+        if not download_url:
+            print("[!] Download URL not available.")
+            return
+
+        try:
+            req = urllib.request.Request(download_url, headers={"User-Agent": "Mozilla/5.0 (AutoUpdater)"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                new_code = resp.read().decode("utf-8")
+
+            # Update current script
+            with open(SCRIPT_PATH, "w", encoding="utf-8") as f:
+                f.write(new_code)
+            os.chmod(SCRIPT_PATH, 0o755)
+
+            target_installed = Path.home() / ".hoyolab-checkin" / "checkin.py"
+            if target_installed.exists() and target_installed != SCRIPT_PATH:
+                with open(target_installed, "w", encoding="utf-8") as f:
+                    f.write(new_code)
+                os.chmod(target_installed, 0o755)
+
+            print(f"✅ Successfully updated to v{latest_ver}!")
+            print("🔄 Restarting application...")
+            time.sleep(1)
+            os.execv(sys.executable, [sys.executable, str(SCRIPT_PATH)] + sys.argv[1:])
+        except Exception as e:
+            print(f"[x] Failed to install update: {e}")
+            input("Press Enter to continue...")
+    else:
+        print("[*] Update skipped.\n")
+
+
 # ==============================================================================
 # Configuration & Cookie Management
 # ==============================================================================
@@ -842,10 +940,11 @@ def interactive_hub():
             print(f" [3] 🎮 Toggle Active Games ({enabled_str})")
             print(" [4] ⏰ Manage Daily Auto Check-In (Windows / Mac / Linux)")
             print(" [5] 🔄 Re-login / Switch Account")
+            print(" [6] 🔄 Check for Updates")
             print(" [0] 🚪 Exit")
             print("=" * 58)
 
-            choice = input("Select an option [0-5]: ").strip()
+            choice = input("Select an option [0-6]: ").strip()
             if choice == "1":
                 run_checkin_batch([cookie], enabled_games, dry_run=False, verbose=True)
                 input("\nPress Enter to return to menu...")
@@ -858,6 +957,8 @@ def interactive_hub():
                 menu_manage_scheduler()
             elif choice == "5":
                 menu_login_options()
+            elif choice == "6":
+                check_for_updates(prompt_if_latest=True)
             elif choice == "0":
                 print("Goodbye! 👋")
                 sys.exit(0)
@@ -906,6 +1007,7 @@ def main():
 
     # If launched with no args and connected to a terminal (interactive TTY):
     if len(sys.argv) == 1 and sys.stdin.isatty():
+        check_for_updates(prompt_if_latest=False)
         interactive_hub()
         return
 
