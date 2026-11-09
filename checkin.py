@@ -24,15 +24,6 @@ from pathlib import Path
 
 # --- Game Definitions ---
 GAMES = {
-    "starrail": {
-        "name": "Honkai: Star Rail",
-        "emoji": "🚂",
-        "act_id": "e202303301540311",
-        "info_url": "https://sg-public-api.hoyolab.com/event/luna/os/info",
-        "sign_url": "https://sg-public-api.hoyolab.com/event/luna/os/sign",
-        "home_url": "https://sg-public-api.hoyolab.com/event/luna/os/home",
-        "referer": "https://act.hoyolab.com/bbs/event/signin/hkrpg/e202303301540311.html?act_id=e202303301540311",
-    },
     "genshin": {
         "name": "Genshin Impact",
         "emoji": "✨",
@@ -42,6 +33,15 @@ GAMES = {
         "home_url": "https://sg-hk4e-api.hoyolab.com/event/sol/home",
         "referer": "https://act.hoyolab.com/ys/event/signin-sea-v3/index.html?act_id=e202102251931481",
     },
+    "starrail": {
+        "name": "Honkai: Star Rail",
+        "emoji": "🚂",
+        "act_id": "e202303301540311",
+        "info_url": "https://sg-public-api.hoyolab.com/event/luna/os/info",
+        "sign_url": "https://sg-public-api.hoyolab.com/event/luna/os/sign",
+        "home_url": "https://sg-public-api.hoyolab.com/event/luna/os/home",
+        "referer": "https://act.hoyolab.com/bbs/event/signin/hkrpg/e202303301540311.html?act_id=e202303301540311",
+    },
     "zzz": {
         "name": "Zenless Zone Zero",
         "emoji": "🎬",
@@ -50,6 +50,34 @@ GAMES = {
         "sign_url": "https://sg-act-nap-api.hoyolab.com/event/luna/zzz/os/sign",
         "home_url": "https://sg-act-nap-api.hoyolab.com/event/luna/zzz/os/home",
         "referer": "https://act.hoyolab.com/bbs/event/signin/zzz/e202406031448091.html?act_id=e202406031448091",
+    },
+    "honkai3rd": {
+        "name": "Honkai Impact 3rd",
+        "emoji": "⚔️",
+        "act_id": "e202110291205111",
+        "info_url": "https://sg-public-api.hoyolab.com/event/mani/info",
+        "sign_url": "https://sg-public-api.hoyolab.com/event/mani/sign",
+        "home_url": "https://sg-public-api.hoyolab.com/event/mani/home",
+        "referer": "https://act.hoyolab.com/bbs/event/signin-bh3/index.html?act_id=e202110291205111",
+    },
+    "themis": {
+        "name": "Tears of Themis",
+        "emoji": "⚖️",
+        "act_id": "e202202281857121",
+        "info_url": "https://sg-public-api.hoyolab.com/event/luna/os/info",
+        "sign_url": "https://sg-public-api.hoyolab.com/event/luna/os/sign",
+        "home_url": "https://sg-public-api.hoyolab.com/event/luna/os/home",
+        "referer": "https://act.hoyolab.com/bbs/event/signin/nxx/index.html?act_id=e202202281857121",
+    },
+    "hoyolab": {
+        "name": "HoYoLAB Community",
+        "emoji": "💬",
+        "act_id": "community",
+        "info_url": "https://bbs-api-os.hoyolab.com/community/painter/wapi/task/attend",
+        "sign_url": "https://bbs-api-os.hoyolab.com/community/painter/wapi/task/attend",
+        "home_url": "https://www.hoyolab.com",
+        "referer": "https://www.hoyolab.com/",
+        "is_community": True,
     },
 }
 
@@ -72,7 +100,28 @@ BASE_HEADERS = {
 
 AWARDS_CACHE = {}
 ENV_PATH = Path.home() / ".hoyolab-checkin" / ".env"
+CONFIG_PATH = Path.home() / ".hoyolab-checkin" / "config.json"
 OS_NAME = platform.system()  # 'Darwin', 'Windows', 'Linux'
+
+
+def load_hoyo_config() -> dict:
+    """Load configuration including enabled games."""
+    default = {"enabled_games": ["genshin", "starrail", "zzz", "honkai3rd", "themis", "hoyolab"]}
+    if CONFIG_PATH.exists():
+        try:
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return {**default, **data}
+        except Exception:
+            pass
+    return default
+
+
+def save_hoyo_config(data: dict):
+    """Save configuration."""
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
 
 
 # ==============================================================================
@@ -461,6 +510,9 @@ def fetch_awards(game_key: str):
         return AWARDS_CACHE[game_key]
 
     cfg = GAMES[game_key]
+    if cfg.get("is_community"):
+        return []
+
     url = f"{cfg['home_url']}?lang=en-us&act_id={cfg['act_id']}"
     res = request_json(url, method="GET", headers={"Referer": cfg["referer"]})
     if res.get("retcode") == 0 and res.get("data") and "awards" in res["data"]:
@@ -473,13 +525,40 @@ def check_in_game(game_key: str, cookie: str, dry_run: bool = False, verbose: bo
     """Execute status check and daily sign-in."""
     cfg = GAMES[game_key]
     headers = {"Referer": cfg["referer"], "Cookie": cookie}
+
+    if verbose:
+        print(f"\n{cfg['emoji']} Checking {cfg['name']}...")
+
+    # Community Check-in logic
+    if cfg.get("is_community"):
+        if dry_run:
+            msg = "Ready to attend HoYoLAB Community."
+            if verbose:
+                print(f"  ℹ️  [Dry Run] {msg}")
+            return {"game": cfg["name"], "success": True, "status": "DRY_RUN", "message": msg}
+        sign_res = request_json(cfg["sign_url"], method="POST", headers=headers, body={})
+        code = sign_res.get("retcode", -1)
+        if code == 0:
+            msg = "HoYoLAB Community attended successfully!"
+            if verbose:
+                print(f"  🎉 {msg}")
+            return {"game": cfg["name"], "success": True, "status": "SUCCESS", "message": msg}
+        elif code in (-5003, 1008):
+            msg = "Already attended HoYoLAB Community today."
+            if verbose:
+                print(f"  ✅ {msg}")
+            return {"game": cfg["name"], "success": True, "status": "ALREADY_CHECKED_IN", "message": msg}
+        else:
+            err = sign_res.get("message", "Unknown error")
+            msg = f"Attendance failed: {err}"
+            if verbose:
+                print(f"  ❌ {msg}")
+            return {"game": cfg["name"], "success": False, "status": "FAILED", "message": msg}
+
     act_id = cfg["act_id"]
     query = f"lang=en-us&act_id={act_id}"
     info_url = f"{cfg['info_url']}?{query}"
     sign_url = f"{cfg['sign_url']}?{query}"
-
-    if verbose:
-        print(f"\n{cfg['emoji']} Checking {cfg['name']}...")
 
     info_res = request_json(info_url, method="GET", headers=headers)
     retcode = info_res.get("retcode")
@@ -577,11 +656,14 @@ def run_checkin_batch(cookies: list, games: list, dry_run: bool = False, verbose
 def check_account_status(cookie: str) -> dict:
     """Quickly check account validity and game states without printing noise."""
     status = {"valid": False, "uid": "Unknown", "games": {}}
-    for game_key in ["starrail", "genshin"]:
-        res = check_in_game(game_key, cookie, dry_run=True, verbose=False)
-        status["games"][game_key] = res
-        if res.get("status") != "AUTH_ERROR" and not status["valid"]:
-            status["valid"] = True
+    cfg = load_hoyo_config()
+    enabled = cfg.get("enabled_games", ["genshin", "starrail", "zzz", "honkai3rd", "themis", "hoyolab"])
+    for game_key in enabled:
+        if game_key in GAMES:
+            res = check_in_game(game_key, cookie, dry_run=True, verbose=False)
+            status["games"][game_key] = res
+            if res.get("status") != "AUTH_ERROR" and not status["valid"]:
+                status["valid"] = True
 
     # Parse account uid from cookie string if possible
     for item in cookie.split(";"):
@@ -591,6 +673,53 @@ def check_account_status(cookie: str) -> dict:
                 status["uid"] = v
                 break
     return status
+
+
+def menu_toggle_games():
+    """Interactive toggle menu for active games."""
+    while True:
+        cfg = load_hoyo_config()
+        enabled = set(cfg.get("enabled_games", ["genshin", "starrail", "zzz", "honkai3rd", "themis", "hoyolab"]))
+
+        print("\n" + "-" * 55)
+        print("🎮 Toggle Games for Daily Check-In")
+        print("-" * 55)
+        game_keys = list(GAMES.keys())
+        for idx, gk in enumerate(game_keys, 1):
+            g = GAMES[gk]
+            status_box = "🟢 [ON] " if gk in enabled else "⚪ [OFF]"
+            print(f" [{idx}] {status_box} {g['emoji']} {g['name']}")
+        print("-" * 55)
+        print("💡 Options:")
+        print(" - Masukkan nomor [1-6] untuk toggle game ON / OFF")
+        print(" - Ketik 'all' untuk aktifkan semua game")
+        print(" - Ketik 'none' untuk nonaktifkan semua game")
+        print(" - Tekan [0] atau ENTER untuk simpan & kembali")
+        print("-" * 55)
+
+        val = input("Pilihan: ").strip().lower()
+        if val in ("0", ""):
+            break
+        elif val == "all":
+            cfg["enabled_games"] = list(GAMES.keys())
+            save_hoyo_config(cfg)
+            print("✅ Semua game diaktifkan!")
+        elif val == "none":
+            cfg["enabled_games"] = []
+            save_hoyo_config(cfg)
+            print("⚪ Semua game dinonaktifkan!")
+        elif val.isdigit() and 1 <= int(val) <= len(game_keys):
+            target_key = game_keys[int(val) - 1]
+            if target_key in enabled:
+                enabled.remove(target_key)
+                print(f"⚪ {GAMES[target_key]['name']} DINONAKTIFKAN.")
+            else:
+                enabled.add(target_key)
+                print(f"✅ {GAMES[target_key]['name']} DIAKTIFKAN!")
+            cfg["enabled_games"] = [gk for gk in game_keys if gk in enabled]
+            save_hoyo_config(cfg)
+        else:
+            print("Input tidak valid.")
 
 
 def menu_manage_scheduler():
@@ -655,7 +784,7 @@ def interactive_hub():
         cookie = cookies[0] if cookies else None
 
         print("\n" + "=" * 58)
-        print("🎮  HoYoLAB Easy Check-In Hub (HSR & Genshin)")
+        print("🎮  HoYoLAB Easy Check-In Hub (All Games)")
         print("=" * 58)
 
         account_info = None
@@ -669,9 +798,11 @@ def interactive_hub():
                     name = GAMES[gk]["name"]
                     emoji = GAMES[gk]["emoji"]
                     if gres.get("status") == "ALREADY_CHECKED_IN":
-                        print(f"   {emoji} {name:<19}: ✅ Checked In (Day {gres.get('days', 0)})")
+                        print(f"   {emoji} {name:<21}: ✅ Checked In (Day {gres.get('days', 0)})")
+                    elif gres.get("status") == "DRY_RUN":
+                        print(f"   {emoji} {name:<21}: 🟡 Ready to Claim!")
                     else:
-                        print(f"   {emoji} {name:<19}: 🟡 Ready to Claim!")
+                        print(f"   {emoji} {name:<21}: ⚪ {gres.get('message', 'Ready')}")
             else:
                 print(f"👤 Account ID:    {account_info['uid']}")
                 print("🔑 Token Status:  🔴 EXPIRED or INVALID")
@@ -687,35 +818,45 @@ def interactive_hub():
         if not cookie or (account_info and not account_info["valid"]):
             print(" [1] 🔑 Login (Auto-import from browser or open login window)")
             print(" [2] ⏰ Manage Auto Check-In Schedule")
+            print(" [3] 🎮 Toggle Active Games")
             print(" [0] 🚪 Exit")
             print("=" * 58)
 
-            choice = input("Select an option: ").strip()
+            choice = input("Select an option [0-3]: ").strip()
             if choice == "1":
                 menu_login_options()
             elif choice == "2":
                 menu_manage_scheduler()
+            elif choice == "3":
+                menu_toggle_games()
             elif choice == "0":
                 print("Goodbye! 👋")
                 sys.exit(0)
         else:
+            cfg = load_hoyo_config()
+            enabled_games = cfg.get("enabled_games", ["genshin", "starrail", "zzz", "honkai3rd", "themis", "hoyolab"])
+            enabled_str = f"{len(enabled_games)}/{len(GAMES)} Active"
+
             print(" [1] 🚀 Check-in Now (Claim Today's Rewards)")
             print(" [2] 🔍 View Streak & Rewards Catalog (Dry Run)")
-            print(" [3] ⏰ Manage Daily Auto Check-In (Windows / Mac / Linux)")
-            print(" [4] 🔄 Re-login / Switch Account")
+            print(f" [3] 🎮 Toggle Active Games ({enabled_str})")
+            print(" [4] ⏰ Manage Daily Auto Check-In (Windows / Mac / Linux)")
+            print(" [5] 🔄 Re-login / Switch Account")
             print(" [0] 🚪 Exit")
             print("=" * 58)
 
-            choice = input("Select an option [0-4]: ").strip()
+            choice = input("Select an option [0-5]: ").strip()
             if choice == "1":
-                run_checkin_batch([cookie], ["starrail", "genshin"], dry_run=False, verbose=True)
+                run_checkin_batch([cookie], enabled_games, dry_run=False, verbose=True)
                 input("\nPress Enter to return to menu...")
             elif choice == "2":
-                run_checkin_batch([cookie], ["starrail", "genshin"], dry_run=True, verbose=True)
+                run_checkin_batch([cookie], enabled_games, dry_run=True, verbose=True)
                 input("\nPress Enter to return to menu...")
             elif choice == "3":
-                menu_manage_scheduler()
+                menu_toggle_games()
             elif choice == "4":
+                menu_manage_scheduler()
+            elif choice == "5":
                 menu_login_options()
             elif choice == "0":
                 print("Goodbye! 👋")
@@ -728,7 +869,7 @@ def interactive_hub():
 
 def main():
     parser = argparse.ArgumentParser(description="HoYoLAB Easy Check-In Hub")
-    parser.add_argument("--game", choices=["starrail", "genshin", "zzz", "all"], default="all")
+    parser.add_argument("--game", choices=list(GAMES.keys()) + ["all"], default="all")
     parser.add_argument("--cookie", type=str, help="Direct cookie string override")
     parser.add_argument("--config", type=str, help="Custom .env path")
     parser.add_argument("--dry-run", action="store_true", help="Check status without claiming")
@@ -782,9 +923,8 @@ def main():
             print("❌ Error: No HoYoLAB credentials found! Run 'genshin-checkin' to log in.")
             sys.exit(1)
 
-    games_to_run = ["starrail", "genshin"] if args.game == "all" else [args.game]
-    if args.game == "all" and loaded_vars.get("ENABLE_ZZZ", "").lower() in ("1", "true", "yes"):
-        games_to_run.append("zzz")
+    cfg = load_hoyo_config()
+    games_to_run = cfg.get("enabled_games", ["genshin", "starrail", "zzz", "honkai3rd", "themis", "hoyolab"]) if args.game == "all" else [args.game]
 
     verbose = not (args.silent or args.cron)
     if verbose:

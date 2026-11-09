@@ -25,6 +25,7 @@ else
 fi
 
 chmod +x "$INSTALL_DIR/checkin.py"
+ln -sf "$INSTALL_DIR/checkin.py" "$BIN_DIR/hoyolab"
 ln -sf "$INSTALL_DIR/checkin.py" "$BIN_DIR/genshin-checkin"
 ln -sf "$INSTALL_DIR/checkin.py" "$BIN_DIR/hoyolab-checkin"
 
