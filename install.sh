@@ -55,9 +55,8 @@ exec "$VENV_DIR/bin/python" "$INSTALL_DIR/checkin.py" "\$@"
 EOF
 chmod +x "$WRAPPER_FILE"
 
-# Aliases for backward compatibility
-ln -sf "$WRAPPER_FILE" "$BIN_DIR/hoyolab"
-ln -sf "$WRAPPER_FILE" "$BIN_DIR/genshin-checkin"
+# Clean up any old aliases if present
+rm -f "$BIN_DIR/hoyolab" "$BIN_DIR/genshin-checkin"
 
 # 5. Ensure ~/.local/bin is in PATH
 CURRENT_SHELL="$(basename "$SHELL")"
@@ -118,5 +117,4 @@ echo "======================================================="
 echo "✅ Instalasi Selesai!"
 echo "👉 Sekarang Anda cukup ketik perintah ini di terminal:"
 echo "   hoyolab-checkin"
-echo "   (atau alias: hoyolab / genshin-checkin)"
 echo "======================================================="
