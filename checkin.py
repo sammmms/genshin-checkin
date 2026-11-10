@@ -144,45 +144,77 @@ def parse_semver(ver: str) -> tuple:
     return tuple(parts)
 
 
+def run_with_progress(title: str, worker_fn, timeout: float = 5.0):
+    """Executes worker_fn in a daemon thread while rendering an animated progress bar and spinner."""
+    import threading
+    res = {"done": False, "result": None, "error": None}
+
+    def target():
+        try:
+            res["result"] = worker_fn()
+        except Exception as e:
+            res["error"] = e
+        finally:
+            res["done"] = True
+
+    t = threading.Thread(target=target, daemon=True)
+    t.start()
+
+    frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    start_t = time.time()
+    i = 0
+
+    while not res["done"] and (time.time() - start_t < timeout):
+        elapsed = time.time() - start_t
+        pct = min(int((elapsed / timeout) * 100), 99)
+        filled = pct // 10
+        bar = "█" * filled + "░" * (10 - filled)
+        sys.stdout.write(f"\r[*] {title}... {frames[i % len(frames)]} [{bar}] {pct}% ({elapsed:.1f}s)")
+        sys.stdout.flush()
+        time.sleep(0.08)
+        i += 1
+
+    sys.stdout.write("\r" + " " * 80 + "\r")
+    sys.stdout.flush()
+    return res["result"], res["error"]
+
+
 def check_for_updates(prompt_if_latest: bool = False):
     """
     Checks latest update from https://wsnsam.my.id/api/updates?app=hoyolab-checkin
     with fallback to raw.githubusercontent.com/sammmms/hoyolab-checkin/main/version.json.
     """
-    sys.stdout.write("[*] Checking for updates... ")
-    sys.stdout.flush()
-
     primary_url = f"https://wsnsam.my.id/api/updates?app={APP_NAME}"
     fallback_url = "https://raw.githubusercontent.com/sammmms/hoyolab-checkin/main/version.json"
 
-    update_data = None
-    for url in [primary_url, fallback_url]:
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (AutoUpdater)"})
-            with urllib.request.urlopen(req, timeout=3) as resp:
-                if resp.status == 200:
-                    update_data = json.loads(resp.read().decode("utf-8"))
-                    break
-        except Exception:
-            continue
+    def fetch_remote():
+        for url in [primary_url, fallback_url]:
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (AutoUpdater)"})
+                with urllib.request.urlopen(req, timeout=3) as resp:
+                    if resp.status == 200:
+                        return json.loads(resp.read().decode("utf-8"))
+            except Exception:
+                continue
+        return None
+
+    update_data, _ = run_with_progress("Checking for updates", fetch_remote, timeout=3.5)
 
     if not update_data or "version" not in update_data:
-        sys.stdout.write("\r[*] Checking for updates... [Skip / Offline]\n")
-        sys.stdout.flush()
-        time.sleep(0.3)
+        print("[*] Checking for updates... [Skip / Offline]")
+        time.sleep(0.2)
         return
 
     latest_ver = update_data["version"]
     if parse_semver(latest_ver) <= parse_semver(APP_VERSION):
-        sys.stdout.write(f"\r[*] Checking for updates... [Latest Version: v{APP_VERSION} ✓]\n")
-        sys.stdout.flush()
-        time.sleep(0.4)
+        print(f"[*] Checking for updates... [Latest Version: v{APP_VERSION} ✓]")
+        time.sleep(0.3)
         if prompt_if_latest:
             print(f"\n[✓] You are already on the latest version (v{APP_VERSION}).\n")
             input("Press Enter to continue...")
         return
 
-    sys.stdout.write("\r" + " " * 60 + "\r")
+    sys.stdout.write("\r" + " " * 80 + "\r")
     sys.stdout.flush()
 
     print("\n" + "=" * 62)
@@ -487,20 +519,35 @@ def wait_for_internet(timeout: int = 180, check_interval: int = 3, verbose: bool
     import socket
 
     start_time = time.time()
+    spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    step = 0
+
     while time.time() - start_time < timeout:
+        elapsed = time.time() - start_time
+        pct = min(int((elapsed / timeout) * 100), 99)
+        bar = "█" * (pct // 10) + "░" * (10 - (pct // 10))
+        if verbose:
+            sys.stdout.write(f"\r[*] Waiting for active internet connection... {spinner[step % len(spinner)]} [{bar}] {elapsed:.1f}s/{timeout}s")
+            sys.stdout.flush()
+            step += 1
+
         try:
-            s = socket.create_connection(("1.1.1.1", 53), timeout=3)
+            s = socket.create_connection(("1.1.1.1", 53), timeout=2)
             s.close()
             req = urllib.request.Request("https://www.google.com", headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=5) as resp:
+            with urllib.request.urlopen(req, timeout=3) as resp:
                 if resp.status in (200, 204, 301, 302):
                     if verbose:
-                        print("[✓] Internet connection is active.")
+                        sys.stdout.write(f"\r{' ' * 75}\r[✓] Internet connection is active! ({elapsed:.1f}s)\n")
+                        sys.stdout.flush()
                     return True
         except Exception:
             pass
         time.sleep(check_interval)
 
+    if verbose:
+        sys.stdout.write(f"\r{' ' * 75}\r[!] Failed to connect to internet after {timeout} seconds.\n")
+        sys.stdout.flush()
     return False
 
 
@@ -927,7 +974,14 @@ def interactive_hub():
 
         account_info = None
         if cookie:
-            account_info = check_account_status(cookie)
+            account_info, _ = run_with_progress(
+                "Memeriksa status sesi & hadiah HoYoLAB",
+                lambda: check_account_status(cookie),
+                timeout=6.0
+            )
+            if not account_info:
+                account_info = {"valid": False, "uid": "Unknown", "games": {}}
+
             if account_info["valid"]:
                 print(f"👤 Account ID:    {account_info['uid']}")
                 print("🔑 Token Status:  🟢 VALID (Active)")
@@ -954,19 +1008,28 @@ def interactive_hub():
 
         # Dynamic Menu Options
         if not cookie or (account_info and not account_info["valid"]):
-            print(" [1] 🔑 Login (Auto-import from browser or open login window)")
+            print("╭" + "─" * 56 + "╮")
+            print("│  ⚠️  STATUS AKUN: BELUM LOGIN / SESI HOYOLAB KOSONG     │")
+            print("│  Check-in harian tidak dapat berjalan tanpa akun!      │")
+            print("│  👉 Pilih opsi [1] di bawah untuk login / impor sesi!  │")
+            print("╰" + "─" * 56 + "╯\n")
+
+            print(" [1] 🔑 [WAJIB] LOGIN SEKARANG (Auto-import Zen/Firefox / Browser)")
             print(" [2] ⏰ Manage Auto Check-In Schedule")
             print(" [3] 🎮 Toggle Active Games")
+            print(" [4] 🔄 Check for Updates")
             print(" [0] 🚪 Exit")
             print("=" * 58)
 
-            choice = input("Select an option [0-3]: ").strip()
+            choice = input("Select an option [0-4]: ").strip()
             if choice == "1":
                 menu_login_options()
             elif choice == "2":
                 menu_manage_scheduler()
             elif choice == "3":
                 menu_toggle_games()
+            elif choice == "4":
+                check_for_updates(prompt_if_latest=True)
             elif choice == "0":
                 print("Goodbye! 👋")
                 sys.exit(0)
