@@ -124,7 +124,7 @@ def save_hoyo_config(data: dict):
         json.dump(data, f, indent=2)
 
 
-APP_NAME = "hoyolab"
+APP_NAME = "hoyolab-checkin"
 APP_VERSION = "1.2.0"
 SCRIPT_PATH = Path(__file__).resolve()
 
@@ -139,14 +139,14 @@ def parse_semver(ver: str) -> tuple:
 
 def check_for_updates(prompt_if_latest: bool = False):
     """
-    Checks latest update from https://wsnsam.my.id/api/updates?app=hoyolab
-    with fallback to raw.githubusercontent.com/sammmms/genshin-checkin/main/version.json.
+    Checks latest update from https://wsnsam.my.id/api/updates?app=hoyolab-checkin
+    with fallback to raw.githubusercontent.com/sammmms/hoyolab-checkin/main/version.json.
     """
     sys.stdout.write("[*] Checking for updates... ")
     sys.stdout.flush()
 
     primary_url = f"https://wsnsam.my.id/api/updates?app={APP_NAME}"
-    fallback_url = "https://raw.githubusercontent.com/sammmms/genshin-checkin/main/version.json"
+    fallback_url = "https://raw.githubusercontent.com/sammmms/hoyolab-checkin/main/version.json"
 
     update_data = None
     for url in [primary_url, fallback_url]:
@@ -1055,7 +1055,7 @@ def main():
         if imported:
             cookies = [imported]
         else:
-            print("❌ Error: No HoYoLAB credentials found! Run 'genshin-checkin' to log in.")
+            print("❌ Error: No HoYoLAB credentials found! Run 'hoyolab-checkin' to log in.")
             sys.exit(1)
 
     cfg = load_hoyo_config()

@@ -1,7 +1,7 @@
-# 🎮 hoyolab — HoYoLAB Easy Check-In Hub (All HoYoverse Games)
+# 🎮 hoyolab-checkin — HoYoLAB Daily Check-In Hub (All HoYoverse Games)
 
 <p align="center">
-  <img src="assets/banner.png" alt="hoyolab Banner" width="100%" />
+  <img src="assets/banner.png" alt="hoyolab-checkin Banner" width="100%" />
 </p>
 
 [![Python 3](https://img.shields.io/badge/Python-3.8+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -17,7 +17,7 @@ Built around a simple philosophy: **"Let you check in easily."** No manual token
 
 ## 🌟 Features
 
-- **Zero Core Dependencies**: Runs purely on standard Python 3 (`urllib`, `sqlite3`, `json`). No `pip install` needed for core operations.
+- **Zero Core Dependencies**: Runs purely on standard Python 3 (`urllib`, `sqlite3`, `json`).
 - **Support for All 6 HoYoverse Titles**:
   1. ✨ **Genshin Impact** (Primogems, Hero's Wit, Mora)
   2. 🚂 **Honkai: Star Rail** (Stellar Jade, Traveler's Guide, Credits)
@@ -28,6 +28,34 @@ Built around a simple philosophy: **"Let you check in easily."** No manual token
 - **Granular Game Toggle Checklist**: Selectively enable or disable check-ins for each game individually. Only claim rewards for the games you actually play!
 - **In-App Auto-Updater**: Checks for new versions on startup via `wsnsam.my.id` / GitHub, displays release changelog, and provides a 1-click in-app update prompt (no need to reinstall!).
 - **One-Click Session Auto-Import**: Instantly detects and imports active HoYoLAB sessions from your desktop browser (**Zen Browser**, **Mozilla Firefox**, **Floorp**) in under 0.1 seconds.
+- **Interactive Browser Window**: Built-in visual login window for Google, Apple ID, and Email/Password logins without touching DevTools.
+- **Dynamic Terminal Dashboard**: Displays your account UID, token validity, today's claim progress across all active games, streak counts, and auto-scheduler status at a glance.
+- **Cross-Platform Daily Automation**:
+  - **macOS**: Built-in LaunchAgent (`launchd`) configuration with wake-up internet readiness waiter and multi-interval catch-up.
+  - **Windows**: Built-in 1-click Windows Task Scheduler integration (`schtasks`).
+  - **Linux**: Automatic Crontab scheduler.
+- **Triple CLI Command**: Jalankan via `hoyolab-checkin` (rekomendasi), atau alias singkat `hoyolab` / `genshin-checkin`.
+
+---
+
+## 🚀 One-Line Installation
+
+### macOS & Linux
+```bash
+curl -fsSL https://raw.githubusercontent.com/sammmms/hoyolab-checkin/main/install.sh | bash
+```
+
+*Atau clone secara lokal:*
+```bash
+git clone https://github.com/sammmms/hoyolab-checkin.git
+cd hoyolab-checkin
+./install.sh
+```
+
+Setelah instalasi, jalankan:
+```bash
+hoyolab-checkin
+```
 - **Interactive Browser Window**: Built-in visual login window for Google, Apple ID, and Email/Password logins without touching DevTools.
 - **Dynamic Terminal Dashboard**: Displays your account UID, token validity, today's claim progress across all active games, streak counts, and auto-scheduler status at a glance.
 - **Cross-Platform Daily Automation**:
