@@ -184,7 +184,7 @@ def check_for_updates(prompt_if_latest: bool = False):
     Checks latest update from https://wsnsam.my.id/api/updates?app=hoyolab-checkin
     with fallback to raw.githubusercontent.com/sammmms/hoyolab-checkin/main/version.json.
     """
-    primary_url = f"https://wsnsam.my.id/api/updates?app={APP_NAME}"
+    primary_url = f"https://script.wsnsam.my.id/api/updates?app={APP_NAME}"
     fallback_url = "https://raw.githubusercontent.com/sammmms/hoyolab-checkin/main/version.json"
 
     def fetch_remote():
