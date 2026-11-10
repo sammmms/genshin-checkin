@@ -472,8 +472,33 @@ def get_scheduler_status():
     return False, "Unsupported OS"
 
 
+def wait_for_internet(timeout: int = 180, check_interval: int = 3, verbose: bool = False) -> bool:
+    """
+    Wait for active internet connectivity with DNS resolution.
+    Essential on macOS wake-up because launchd fires before Wi-Fi reconnects.
+    """
+    import socket
+
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            s = socket.create_connection(("1.1.1.1", 53), timeout=3)
+            s.close()
+            req = urllib.request.Request("https://www.google.com", headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status in (200, 204, 301, 302):
+                    if verbose:
+                        print("[✓] Internet connection is active.")
+                    return True
+        except Exception:
+            pass
+        time.sleep(check_interval)
+
+    return False
+
+
 def install_scheduler():
-    """Install daily background check-in task at 08:00 AM."""
+    """Install daily background check-in task at 08:00 AM with hourly catch-ups."""
     script_path = Path(__file__).resolve()
     python_bin = sys.executable
 
@@ -481,6 +506,17 @@ def install_scheduler():
         plist_path = Path.home() / "Library/LaunchAgents/com.user.hoyolab-checkin.plist"
         plist_path.parent.mkdir(parents=True, exist_ok=True)
         log_path = Path.home() / ".hoyolab-checkin/checkin.log"
+
+        # Build StartCalendarInterval array: 08:00 + hourly catch-ups until 23:00
+        intervals = []
+        for h in range(8, 24):
+            intervals.append(f"""        <dict>
+            <key>Hour</key>
+            <integer>{h}</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>""")
+        intervals_xml = "\n".join(intervals)
 
         content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -495,12 +531,9 @@ def install_scheduler():
         <string>--silent</string>
     </array>
     <key>StartCalendarInterval</key>
-    <dict>
-        <key>Hour</key>
-        <integer>8</integer>
-        <key>Minute</key>
-        <integer>0</integer>
-    </dict>
+    <array>
+{intervals_xml}
+    </array>
     <key>StandardOutPath</key>
     <string>{log_path}</string>
     <key>StandardErrorPath</key>
@@ -514,7 +547,7 @@ def install_scheduler():
         subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True)
         subprocess.run(["launchctl", "load", str(plist_path)], check=True)
         print("✅ Daily auto check-in registered at 08:00 AM via macOS LaunchAgent!")
-        print("ℹ️ Catches up automatically if MacBook was asleep.")
+        print("ℹ️ Catches up automatically whenever MacBook wakes up during the day.")
         return True
 
     elif OS_NAME == "Windows":
@@ -1031,9 +1064,22 @@ def main():
     verbose = not (args.silent or args.cron)
     if verbose:
         print(f"🚀 HoYoLAB Check-In [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
+    else:
+        # Wait for active internet connection upon wake up
+        if not wait_for_internet(timeout=180, verbose=False):
+            print(f"❌ [HoYoLAB] Internet connection not available after 180s wake-up wait.")
+            sys.exit(1)
 
-    results = run_checkin_batch(cookies, games_to_run, dry_run=args.dry_run, verbose=verbose)
-    success = all(r.get("success") for r in results)
+    max_retries = 3 if (args.silent or args.cron) else 1
+    success = False
+    for attempt in range(1, max_retries + 1):
+        results = run_checkin_batch(cookies, games_to_run, dry_run=args.dry_run, verbose=verbose)
+        success = all(r.get("success") for r in results)
+        if success or attempt == max_retries:
+            break
+        time.sleep(30)
+        wait_for_internet(timeout=60, verbose=False)
+
     sys.exit(0 if success else 1)
 
 
