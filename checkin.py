@@ -16,7 +16,14 @@ import sqlite3
 import platform
 import argparse
 import subprocess
+import signal
 import urllib.request
+
+def handle_sigint(sig=None, frame=None):
+    print("\n\n👋 Operasi dibatalkan oleh pengguna (Keluar). Sampai jumpa!\n")
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, handle_sigint)
 import urllib.error
 import urllib.parse
 from datetime import datetime
@@ -1084,4 +1091,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        handle_sigint()
