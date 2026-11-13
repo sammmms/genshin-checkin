@@ -1,13 +1,13 @@
 {
   "app": "hoyolab-checkin",
   "name": "HoYoLAB Check-In Hub",
-  "version": "1.3.0",
-  "release_date": "2026-11-10",
+  "version": "1.4.0",
+  "release_date": "2026-11-13",
   "changelog": [
-    "🏷️  Project resmi diganti nama menjadi 'hoyolab-checkin'",
-    "📦 Standardisasi install.sh dengan Virtual Environment terisolasi",
-    "⏰ Multi-interval hourly wake-up catch-up pada macOS LaunchAgent",
-    "⚡ Dukungan penuh untuk 3 alias perintah: 'hoyolab-checkin', 'hoyolab', dan 'genshin-checkin'"
+    "🌐 Bilingual Internationalization: Full support for English (default) & Bahasa Indonesia",
+    "🔄 Interactive language switcher and '--lang' CLI argument support",
+    "⏰ Multi-interval hourly wake-up catch-up on macOS LaunchAgent",
+    "🏷️  Consistent status and error reporting across all games"
   ],
   "download_url": "https://raw.githubusercontent.com/sammmms/hoyolab-checkin/main/checkin.py"
 }

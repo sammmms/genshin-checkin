@@ -4,6 +4,7 @@ HoYoLAB Easy Check-In & Helper Hub
 Supports: Windows, macOS, Linux
 Games: Honkai: Star Rail (HSR), Genshin Impact, and Zenless Zone Zero (ZZZ)
 Zero external dependencies for core functionality.
+Bilingual Support: English (Default) & Bahasa Indonesia
 """
 
 import sys
@@ -18,12 +19,6 @@ import argparse
 import subprocess
 import signal
 import urllib.request
-
-def handle_sigint(sig=None, frame=None):
-    print("\n\n👋 Operasi dibatalkan oleh pengguna (Keluar). Sampai jumpa!\n")
-    sys.exit(0)
-
-signal.signal(signal.SIGINT, handle_sigint)
 import urllib.error
 import urllib.parse
 from datetime import datetime
@@ -109,11 +104,303 @@ AWARDS_CACHE = {}
 ENV_PATH = Path.home() / ".hoyolab-checkin" / ".env"
 CONFIG_PATH = Path.home() / ".hoyolab-checkin" / "config.json"
 OS_NAME = platform.system()  # 'Darwin', 'Windows', 'Linux'
+APP_NAME = "hoyolab-checkin"
+APP_VERSION = "1.4.0"
+SCRIPT_PATH = Path(__file__).resolve()
 
+# ==============================================================================
+# Internationalization (i18n): EN (Default) & ID
+# ==============================================================================
+
+DEFAULT_LANG = "en"
+CURRENT_LANG = "en"
+
+TRANSLATIONS = {
+    "en": {
+        "sigint_exit": "\n\n👋 Operation cancelled by user (Exit). Goodbye!\n",
+        "checking_updates": "Checking for updates",
+        "update_offline": "[*] Checking for updates... [Skip / Offline]",
+        "update_latest": "[*] Checking for updates... [Latest Version: v{ver} ✓]",
+        "update_already_latest": "\n[✓] You are already on the latest version (v{ver}).\n",
+        "press_enter_continue": "Press Enter to continue...",
+        "press_enter_return": "\nPress Enter to return to menu...",
+        "update_available": "🚀 UPDATE AVAILABLE! (v{current} ➔ v{latest})",
+        "release_date": "📅 Release: {date}",
+        "changelog": "📋 Changelog:",
+        "install_update_prompt": "Install update v{ver} now? [Y/n]: ",
+        "downloading_update": "\n⬇️  Downloading update v{ver}...",
+        "update_no_url": "[!] Download URL not available.",
+        "update_success": "✅ Successfully updated to v{ver}!",
+        "restarting_app": "🔄 Restarting application...",
+        "update_failed": "[x] Failed to install update: {err}",
+        "update_skipped": "[*] Update skipped.\n",
+        "cookie_saved": "💾 Cookie saved to: {path}",
+        "found_browser_session": "✨ Found active HoYoLAB session in {browser}!",
+        "account_id_label": "   👤 Account ID: {uid}",
+        "launch_login_window": "\n🌐 Launching interactive login window...",
+        "login_instructions_1": "👉 Please log in to HoYoLAB in the window that appears.",
+        "login_instructions_2": "👉 (Google, Apple, or Email + Password login are all supported).\n",
+        "installing_playwright": "📦 Installing Playwright automation engine...",
+        "waiting_user_login": "⏳ Waiting for you to log in...",
+        "login_detected": "\n🎉 Login detected for Account ID: {uid}!",
+        "login_timeout": "❌ Login timed out or cancelled.",
+        "status_active": "Active",
+        "status_loaded": "Loaded",
+        "status_not_configured": "Not Configured",
+        "status_unsupported": "Unsupported OS",
+        "wait_internet": "Waiting for active internet connection",
+        "internet_active": "Internet connection is active! ({elapsed:.1f}s)",
+        "internet_failed": "Failed to connect to internet after {timeout} seconds.",
+        "internet_wake_failed": "❌ [HoYoLAB] Internet connection not available after {timeout}s wake-up wait.",
+        "scheduler_macos_installed": "✅ Daily auto check-in registered at 08:00 AM via macOS LaunchAgent!\nℹ️ Catches up automatically whenever MacBook wakes up during the day.",
+        "scheduler_win_installed": "✅ Daily auto check-in registered at 08:00 AM in Windows Task Scheduler!",
+        "scheduler_linux_installed": "✅ Daily auto check-in registered at 08:00 AM in Linux Crontab!",
+        "scheduler_macos_removed": "🗑️ Removed macOS LaunchAgent schedule.",
+        "scheduler_win_removed": "🗑️ Removed Windows Task Scheduler entry.",
+        "scheduler_linux_removed": "🗑️ Removed Linux Crontab schedule.",
+        "checkin_start": "Checking in to {name}...",
+        "auth_expired": "Session cookie expired or invalid. Please re-login.",
+        "checkin_err": "Error (code {code}): {err}",
+        "already_checked_in": "Already checked in today! (Day {day}{award})",
+        "streak_status": "📅 Streak: {days} day(s) this month (Missed: {missed})",
+        "dry_run_ready": "Not checked in yet today. Ready to claim Day {day}.",
+        "dry_run_streak": "📅 Current streak: {days} day(s)",
+        "checkin_success": "Check-in successful! Total days: {days}{award}",
+        "checkin_failed": "Check-in failed (code {code}): {err}",
+        "community_ready": "Ready to attend HoYoLAB Community.",
+        "community_success": "HoYoLAB Community attended successfully!",
+        "community_already": "Already attended HoYoLAB Community today.",
+        "community_failed": "Attendance failed: {err}",
+        "toggle_games_title": "🎮 Toggle Games for Daily Check-In",
+        "toggle_options_header": "💡 Options:",
+        "toggle_opt_1": " - Enter number [1-{count}] to toggle game ON / OFF",
+        "toggle_opt_2": " - Type 'all' to enable all games",
+        "toggle_opt_3": " - Type 'none' to disable all games",
+        "toggle_opt_4": " - Press [0] or ENTER to save & return",
+        "prompt_choice": "Choice: ",
+        "all_games_enabled": "✅ All games enabled!",
+        "all_games_disabled": "⚪ All games disabled!",
+        "game_disabled": "⚪ {name} DISABLED.",
+        "game_enabled": "✅ {name} ENABLED!",
+        "invalid_input": "Invalid input.",
+        "sched_menu_title": "⏰ Daily Auto Check-In Manager [{os}]",
+        "sched_status": "Status: {icon} {desc}",
+        "sched_opt_install": " [1] ⏰ Enable / Install Daily Auto Check-In (Runs at 08:00 AM)",
+        "sched_opt_remove": " [2] 🗑️  Disable / Remove Auto Check-In",
+        "sched_opt_back": " [0] 🔙 Back to Main Menu",
+        "sched_prompt": "Select an option [0-2]: ",
+        "login_menu_title": "🔑 Login to HoYoLAB",
+        "login_opt_auto": " [1] ✨ Auto-Import from Browser (Zen / Firefox) [Instant]",
+        "login_opt_browser": " [2] 🌐 Open Browser Window (Google / Apple / Email Login)",
+        "login_opt_manual": " [3] ⌨️  Enter Cookie Manually",
+        "login_opt_cancel": " [0] 🔙 Cancel",
+        "login_prompt": "Select option [0-3]: ",
+        "login_auto_success": "\n✅ Successfully imported and saved login credentials!",
+        "login_auto_none": "[-] No active browser session found. Try option 2.",
+        "paste_cookie": "\nPaste your cookie string (ltoken_v2=...; ltuid_v2=...): ",
+        "cookie_saved_success": "✅ Cookie saved.",
+        "lang_menu_title": "🌐 Select Language / Pilih Bahasa",
+        "lang_opt_en": " [1] 🇬🇧 English (Default)",
+        "lang_opt_id": " [2] 🇮🇩 Bahasa Indonesia",
+        "lang_opt_back": " [0] 🔙 Back to Main Menu",
+        "lang_prompt": "Select an option [0-2]: ",
+        "lang_saved": "✅ Language changed to: {lang}",
+        "hub_title": "🎮  HoYoLAB Easy Check-In Hub (All Games)",
+        "hub_account_logged": "👤 Account ID:    {uid}",
+        "hub_token_valid": "🔑 Token Status:  🟢 VALID (Active)",
+        "hub_token_expired": "🔑 Token Status:  🔴 EXPIRED or INVALID",
+        "hub_account_not_logged": "👤 Account:       ⚪ Not Logged In",
+        "hub_no_credentials": "🔑 Token Status:  ⚪ No Credentials Found",
+        "hub_today_status": "📅 Today's Status:",
+        "hub_auto_checkin": "⏰ Auto Check-in:  {icon} {desc}",
+        "hub_warning_title": "⚠️  ACCOUNT STATUS: NOT LOGGED IN / EMPTY HOYOLAB SESSION",
+        "hub_warning_desc1": "Daily check-in cannot run without an account!",
+        "hub_warning_desc2": "👉 Choose option [1] below to log in or import your session!",
+        "hub_no_login_opt_1": " [1] 🔑 [REQUIRED] LOGIN NOW (Auto-import Zen/Firefox / Browser)",
+        "hub_no_login_opt_2": " [2] ⏰ Manage Auto Check-In Schedule",
+        "hub_no_login_opt_3": " [3] 🎮 Toggle Active Games",
+        "hub_no_login_opt_4": " [4] 🔄 Check for Updates",
+        "hub_no_login_opt_5": " [5] 🌐 Language / Bahasa (Current: English)",
+        "hub_no_login_opt_0": " [0] 🚪 Exit",
+        "hub_no_login_prompt": "Select an option [0-5]: ",
+        "hub_logged_opt_1": " [1] 🚀 Check-in Now (Claim Today's Rewards)",
+        "hub_logged_opt_2": " [2] 🔍 View Streak & Rewards Catalog (Dry Run)",
+        "hub_logged_opt_3": " [3] 🎮 Toggle Active Games ({games})",
+        "hub_logged_opt_4": " [4] ⏰ Manage Daily Auto Check-In ({os})",
+        "hub_logged_opt_5": " [5] 🔄 Re-login / Switch Account",
+        "hub_logged_opt_6": " [6] 🔄 Check for Updates",
+        "hub_logged_opt_7": " [7] 🌐 Language / Bahasa (Current: English)",
+        "hub_logged_opt_0": " [0] 🚪 Exit",
+        "hub_login_prompt": "Select an option [0-7]: ",
+        "goodbye": "Goodbye! 👋",
+        "cli_no_cred": "❌ Error: No HoYoLAB credentials found! Run 'hoyolab-checkin' to log in.",
+        "cli_starting": "🚀 HoYoLAB Check-In [{time}]",
+        "checking_session_progress": "Checking HoYoLAB session status & rewards",
+        "checked_in_badge": "Checked In (Day {day})",
+        "ready_to_claim_badge": "Ready to Claim!",
+        "ready_badge": "Ready",
+    },
+    "id": {
+        "sigint_exit": "\n\n👋 Operasi dibatalkan oleh pengguna (Keluar). Sampai jumpa!\n",
+        "checking_updates": "Memeriksa pembaruan",
+        "update_offline": "[*] Memeriksa pembaruan... [Lewati / Offline]",
+        "update_latest": "[*] Memeriksa pembaruan... [Versi Terbaru: v{ver} ✓]",
+        "update_already_latest": "\n[✓] Anda sudah menggunakan versi terbaru (v{ver}).\n",
+        "press_enter_continue": "Tekan Enter untuk melanjutkan...",
+        "press_enter_return": "\nTekan Enter untuk kembali ke menu...",
+        "update_available": "🚀 PEMBARUAN TERSEDIA! (v{current} ➔ v{latest})",
+        "release_date": "📅 Rilis: {date}",
+        "changelog": "📋 Catatan Perubahan:",
+        "install_update_prompt": "Pasang pembaruan v{ver} sekarang? [Y/n]: ",
+        "downloading_update": "\n⬇️  Mengunduh pembaruan v{ver}...",
+        "update_no_url": "[!] URL unduhan tidak tersedia.",
+        "update_success": "✅ Berhasil memperbarui ke v{ver}!",
+        "restarting_app": "🔄 Memulai ulang aplikasi...",
+        "update_failed": "[x] Gagal memasang pembaruan: {err}",
+        "update_skipped": "[*] Pembaruan dilewati.\n",
+        "cookie_saved": "💾 Cookie disimpan ke: {path}",
+        "found_browser_session": "✨ Menemukan sesi aktif HoYoLAB di {browser}!",
+        "account_id_label": "   👤 ID Akun: {uid}",
+        "launch_login_window": "\n🌐 Membuka jendela login browser interaktif...",
+        "login_instructions_1": "👉 Silakan login ke akun HoYoLAB pada jendela browser yang muncul.",
+        "login_instructions_2": "👉 (Mendukung login dengan Google, Apple, atau Email + Sandi).\n",
+        "installing_playwright": "📦 Memasang mesin automasi Playwright...",
+        "waiting_user_login": "⏳ Menunggu Anda login di browser...",
+        "login_detected": "\n🎉 Login terdeteksi untuk ID Akun: {uid}!",
+        "login_timeout": "❌ Waktu login habis atau dibatalkan.",
+        "status_active": "Aktif",
+        "status_loaded": "Dimuat",
+        "status_not_configured": "Belum Dikonfigurasi",
+        "status_unsupported": "OS Tidak Didukung",
+        "wait_internet": "Menunggu koneksi internet aktif",
+        "internet_active": "Koneksi internet telah aktif! ({elapsed:.1f}s)",
+        "internet_failed": "Gagal terhubung ke internet setelah {timeout} detik.",
+        "internet_wake_failed": "❌ [HoYoLAB] Koneksi internet tidak tersedia setelah menunggu {timeout} detik.",
+        "scheduler_macos_installed": "✅ Auto check-in harian berhasil didaftarkan pukul 08:00 via macOS LaunchAgent!\nℹ️ Akan mengejar otomatis kapan pun MacBook menyala di siang hari.",
+        "scheduler_win_installed": "✅ Auto check-in harian berhasil didaftarkan pukul 08:00 di Windows Task Scheduler!",
+        "scheduler_linux_installed": "✅ Auto check-in harian berhasil didaftarkan pukul 08:00 di Linux Crontab!",
+        "scheduler_macos_removed": "🗑️ Jadwal macOS LaunchAgent telah dihapus.",
+        "scheduler_win_removed": "🗑️ Entri Windows Task Scheduler telah dihapus.",
+        "scheduler_linux_removed": "🗑️ Entri Linux Crontab telah dihapus.",
+        "checkin_start": "Memproses check-in untuk {name}...",
+        "auth_expired": "Cookie sesi kedaluwarsa atau tidak valid. Silakan login ulang.",
+        "checkin_err": "Error (kode {code}): {err}",
+        "already_checked_in": "Sudah check-in hari ini! (Hari ke-{day}{award})",
+        "streak_status": "📅 Streak: {days} hari bulan ini (Terlewat: {missed})",
+        "dry_run_ready": "Belum check-in hari ini. Siap klaim Hari ke-{day}.",
+        "dry_run_streak": "📅 Streak saat ini: {days} hari",
+        "checkin_success": "Check-in berhasil! Total hari: {days}{award}",
+        "checkin_failed": "Check-in gagal (kode {code}): {err}",
+        "community_ready": "Siap absen di Komunitas HoYoLAB.",
+        "community_success": "Absen Komunitas HoYoLAB berhasil!",
+        "community_already": "Sudah absen di Komunitas HoYoLAB hari ini.",
+        "community_failed": "Absen Komunitas gagal: {err}",
+        "toggle_games_title": "🎮 Atur Game untuk Daily Check-In",
+        "toggle_options_header": "💡 Pilihan:",
+        "toggle_opt_1": " - Masukkan nomor [1-{count}] untuk mengubah status game ON / OFF",
+        "toggle_opt_2": " - Ketik 'all' untuk mengaktifkan semua game",
+        "toggle_opt_3": " - Ketik 'none' untuk menonaktifkan semua game",
+        "toggle_opt_4": " - Tekan [0] atau ENTER untuk simpan & kembali",
+        "prompt_choice": "Pilihan: ",
+        "all_games_enabled": "✅ Semua game diaktifkan!",
+        "all_games_disabled": "⚪ Semua game dinonaktifkan!",
+        "game_disabled": "⚪ {name} DINONAKTIFKAN.",
+        "game_enabled": "✅ {name} DIAKTIFKAN!",
+        "invalid_input": "Pilihan tidak valid.",
+        "sched_menu_title": "⏰ Manajer Auto Check-In Harian [{os}]",
+        "sched_status": "Status: {icon} {desc}",
+        "sched_opt_install": " [1] ⏰ Pasang / Aktifkan Auto Check-In Harian (Pukul 08:00)",
+        "sched_opt_remove": " [2] 🗑️  Nonaktifkan / Hapus Auto Check-In",
+        "sched_opt_back": " [0] 🔙 Kembali ke Menu Utama",
+        "sched_prompt": "Pilih opsi [0-2]: ",
+        "login_menu_title": "🔑 Login ke HoYoLAB",
+        "login_opt_auto": " [1] ✨ Impor Otomatis dari Browser (Zen / Firefox) [Instan]",
+        "login_opt_browser": " [2] 🌐 Buka Jendela Browser (Login Google / Apple / Email)",
+        "login_opt_manual": " [3] ⌨️  Masukkan Cookie Manual",
+        "login_opt_cancel": " [0] 🔙 Batal",
+        "login_prompt": "Pilih opsi [0-3]: ",
+        "login_auto_success": "\n✅ Berhasil mengimpor dan menyimpan kredensial login!",
+        "login_auto_none": "[-] Tidak ditemukan sesi browser aktif. Coba pilihan 2.",
+        "paste_cookie": "\nTempel string cookie Anda (ltoken_v2=...; ltuid_v2=...): ",
+        "cookie_saved_success": "✅ Cookie berhasil disimpan.",
+        "lang_menu_title": "🌐 Pilih Bahasa / Select Language",
+        "lang_opt_en": " [1] 🇬🇧 English (Default)",
+        "lang_opt_id": " [2] 🇮🇩 Bahasa Indonesia",
+        "lang_opt_back": " [0] 🔙 Kembali ke Menu Utama",
+        "lang_prompt": "Pilih opsi [0-2]: ",
+        "lang_saved": "✅ Bahasa berhasil diubah ke: {lang}",
+        "hub_title": "🎮  HoYoLAB Easy Check-In Hub (Semua Game)",
+        "hub_account_logged": "👤 ID Akun:       {uid}",
+        "hub_token_valid": "🔑 Status Token:  🟢 VALID (Aktif)",
+        "hub_token_expired": "🔑 Status Token:  🔴 KEDALUWARSA atau TIDAK VALID",
+        "hub_account_not_logged": "👤 Akun:          ⚪ Belum Login",
+        "hub_no_credentials": "🔑 Status Token:  ⚪ Kredensial Tidak Ditemukan",
+        "hub_today_status": "📅 Status Hari Ini:",
+        "hub_auto_checkin": "⏰ Auto Check-in:  {icon} {desc}",
+        "hub_warning_title": "⚠️  STATUS AKUN: BELUM LOGIN / SESI HOYOLAB KOSONG",
+        "hub_warning_desc1": "Check-in harian tidak dapat berjalan tanpa akun!",
+        "hub_warning_desc2": "👉 Pilih opsi [1] di bawah untuk login / impor sesi!",
+        "hub_no_login_opt_1": " [1] 🔑 [WAJIB] LOGIN SEKARANG (Auto-import Zen/Firefox / Browser)",
+        "hub_no_login_opt_2": " [2] ⏰ Kelola Jadwal Auto Check-In",
+        "hub_no_login_opt_3": " [3] 🎮 Atur Game Aktif",
+        "hub_no_login_opt_4": " [4] 🔄 Cek Pembaruan",
+        "hub_no_login_opt_5": " [5] 🌐 Bahasa / Language (Saat ini: Bahasa Indonesia)",
+        "hub_no_login_opt_0": " [0] 🚪 Keluar",
+        "hub_no_login_prompt": "Pilih opsi [0-5]: ",
+        "hub_logged_opt_1": " [1] 🚀 Check-in Sekarang (Klaim Hadiah Hari Ini)",
+        "hub_logged_opt_2": " [2] 🔍 Lihat Streak & Katalog Hadiah (Dry Run)",
+        "hub_logged_opt_3": " [3] 🎮 Atur Game Aktif ({games})",
+        "hub_logged_opt_4": " [4] ⏰ Kelola Auto Check-In Harian ({os})",
+        "hub_logged_opt_5": " [5] 🔄 Login Ulang / Ganti Akun",
+        "hub_logged_opt_6": " [6] 🔄 Cek Pembaruan",
+        "hub_logged_opt_7": " [7] 🌐 Bahasa / Language (Saat ini: Bahasa Indonesia)",
+        "hub_logged_opt_0": " [0] 🚪 Keluar",
+        "hub_login_prompt": "Pilih opsi [0-7]: ",
+        "goodbye": "Sampai jumpa! 👋",
+        "cli_no_cred": "❌ Error: Kredensial HoYoLAB tidak ditemukan! Jalankan 'hoyolab-checkin' untuk login.",
+        "cli_starting": "🚀 HoYoLAB Check-In [{time}]",
+        "checking_session_progress": "Memeriksa status sesi & hadiah HoYoLAB",
+        "checked_in_badge": "Sudah Check-In (Hari ke-{day})",
+        "ready_to_claim_badge": "Siap Diklaim!",
+        "ready_badge": "Siap",
+    }
+}
+
+def t(key: str, default: str = None, **kwargs) -> str:
+    lang = CURRENT_LANG if CURRENT_LANG in TRANSLATIONS else DEFAULT_LANG
+    s = TRANSLATIONS.get(lang, {}).get(key)
+    if s is None:
+        s = TRANSLATIONS.get(DEFAULT_LANG, {}).get(key, default if default is not None else key)
+    if kwargs:
+        try:
+            return s.format(**kwargs)
+        except Exception:
+            return s
+    return s
+
+def set_language(lang_code: str):
+    global CURRENT_LANG
+    if str(lang_code).lower() in ("id", "in", "indonesia", "indonesian"):
+        CURRENT_LANG = "id"
+    else:
+        CURRENT_LANG = "en"
+
+def handle_sigint(sig=None, frame=None):
+    print(t("sigint_exit"))
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, handle_sigint)
+
+# ==============================================================================
+# Configuration & State Management
+# ==============================================================================
 
 def load_hoyo_config() -> dict:
-    """Load configuration including enabled games."""
-    default = {"enabled_games": ["genshin", "starrail", "zzz", "honkai3rd", "themis", "hoyolab"]}
+    """Load configuration including enabled games and language."""
+    default = {
+        "enabled_games": ["genshin", "starrail", "zzz", "honkai3rd", "themis", "hoyolab"],
+        "language": "en"
+    }
     if CONFIG_PATH.exists():
         try:
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -123,18 +410,11 @@ def load_hoyo_config() -> dict:
             pass
     return default
 
-
 def save_hoyo_config(data: dict):
     """Save configuration."""
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
-
-
-APP_NAME = "hoyolab-checkin"
-APP_VERSION = "1.2.0"
-SCRIPT_PATH = Path(__file__).resolve()
-
 
 def parse_semver(ver: str) -> tuple:
     parts = []
@@ -142,7 +422,6 @@ def parse_semver(ver: str) -> tuple:
         if x.isdigit():
             parts.append(int(x))
     return tuple(parts)
-
 
 def run_with_progress(title: str, worker_fn, timeout: float = 5.0):
     """Executes worker_fn in a daemon thread while rendering an animated progress bar and spinner."""
@@ -157,8 +436,8 @@ def run_with_progress(title: str, worker_fn, timeout: float = 5.0):
         finally:
             res["done"] = True
 
-    t = threading.Thread(target=target, daemon=True)
-    t.start()
+    t_thread = threading.Thread(target=target, daemon=True)
+    t_thread.start()
 
     frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     start_t = time.time()
@@ -178,10 +457,9 @@ def run_with_progress(title: str, worker_fn, timeout: float = 5.0):
     sys.stdout.flush()
     return res["result"], res["error"]
 
-
 def check_for_updates(prompt_if_latest: bool = False):
     """
-    Checks latest update from https://wsnsam.my.id/api/updates?app=hoyolab-checkin
+    Checks latest update from https://script.wsnsam.my.id/api/updates?app=hoyolab-checkin
     with fallback to raw.githubusercontent.com/sammmms/hoyolab-checkin/main/version.json.
     """
     primary_url = f"https://script.wsnsam.my.id/api/updates?app={APP_NAME}"
@@ -198,40 +476,40 @@ def check_for_updates(prompt_if_latest: bool = False):
                 continue
         return None
 
-    update_data, _ = run_with_progress("Checking for updates", fetch_remote, timeout=3.5)
+    update_data, _ = run_with_progress(t("checking_updates"), fetch_remote, timeout=3.5)
 
     if not update_data or "version" not in update_data:
-        print("[*] Checking for updates... [Skip / Offline]")
+        print(t("update_offline"))
         time.sleep(0.2)
         return
 
     latest_ver = update_data["version"]
     if parse_semver(latest_ver) <= parse_semver(APP_VERSION):
-        print(f"[*] Checking for updates... [Latest Version: v{APP_VERSION} ✓]")
+        print(t("update_latest", ver=APP_VERSION))
         time.sleep(0.3)
         if prompt_if_latest:
-            print(f"\n[✓] You are already on the latest version (v{APP_VERSION}).\n")
-            input("Press Enter to continue...")
+            print(t("update_already_latest", ver=APP_VERSION))
+            input(t("press_enter_continue"))
         return
 
     sys.stdout.write("\r" + " " * 80 + "\r")
     sys.stdout.flush()
 
     print("\n" + "=" * 62)
-    print(f"🚀 UPDATE AVAILABLE! (v{APP_VERSION} ➔ v{latest_ver})")
-    print(f"📅 Release: {update_data.get('release_date', 'New')}")
+    print(t("update_available", current=APP_VERSION, latest=latest_ver))
+    print(t("release_date", date=update_data.get('release_date', 'New')))
     print("=" * 62)
-    print("📋 Changelog:")
+    print(t("changelog"))
     for change in update_data.get("changelog", []):
         print(f"  • {change}")
     print("=" * 62 + "\n")
 
-    action = input(f"Install update v{latest_ver} now? [Y/n]: ").strip().lower()
+    action = input(t("install_update_prompt", ver=latest_ver)).strip().lower()
     if action in ("", "y", "yes"):
-        print(f"\n⬇️  Downloading update v{latest_ver}...")
+        print(t("downloading_update", ver=latest_ver))
         download_url = update_data.get("download_url")
         if not download_url:
-            print("[!] Download URL not available.")
+            print(t("update_no_url"))
             return
 
         try:
@@ -250,16 +528,15 @@ def check_for_updates(prompt_if_latest: bool = False):
                     f.write(new_code)
                 os.chmod(target_installed, 0o755)
 
-            print(f"✅ Successfully updated to v{latest_ver}!")
-            print("🔄 Restarting application...")
+            print(t("update_success", ver=latest_ver))
+            print(t("restarting_app"))
             time.sleep(1)
             os.execv(sys.executable, [sys.executable, str(SCRIPT_PATH)] + sys.argv[1:])
         except Exception as e:
-            print(f"[x] Failed to install update: {e}")
-            input("Press Enter to continue...")
+            print(t("update_failed", err=e))
+            input(t("press_enter_continue"))
     else:
-        print("[*] Update skipped.\n")
-
+        print(t("update_skipped"))
 
 # ==============================================================================
 # Configuration & Cookie Management
@@ -282,7 +559,6 @@ def load_env_file(filepath: Path) -> dict:
     except Exception as e:
         print(f"[!] Warning reading {filepath}: {e}")
     return env
-
 
 def save_cookie_to_env(cookie_string: str, config_path: Path = None):
     """Save cookie securely to .env file."""
@@ -309,8 +585,7 @@ def save_cookie_to_env(cookie_string: str, config_path: Path = None):
 
     if OS_NAME != "Windows":
         os.chmod(target_path, 0o600)
-    print(f"💾 Cookie saved to: {target_path}")
-
+    print(t("cookie_saved", path=target_path))
 
 def get_cookies_from_env_or_config(config_path: Path = None) -> tuple:
     """Extract cookies from environment or config file."""
@@ -347,7 +622,6 @@ def get_cookies_from_env_or_config(config_path: Path = None) -> tuple:
                 cookies.append(loaded_vars[key])
 
     return cookies, loaded_vars
-
 
 # ==============================================================================
 # Cross-Platform Browser Auto-Import (Zen, Firefox, Floorp)
@@ -386,7 +660,6 @@ def find_browser_cookie_db():
                 found.append((name, db))
     return found
 
-
 def auto_import_from_browser(save: bool = True) -> str:
     """Extract valid session cookies from user's active browser."""
     databases = find_browser_cookie_db()
@@ -415,8 +688,8 @@ def auto_import_from_browser(save: bool = True) -> str:
 
             if ltoken and ltuid:
                 cookie_str = f"ltuid_v2={ltuid}; ltoken_v2={ltoken};"
-                print(f"✨ Found active HoYoLAB session in {browser_name}!")
-                print(f"   👤 Account ID: {ltuid}")
+                print(t("found_browser_session", browser=browser_name))
+                print(t("account_id_label", uid=ltuid))
                 if save:
                     save_cookie_to_env(cookie_str)
                 return cookie_str
@@ -430,17 +703,16 @@ def auto_import_from_browser(save: bool = True) -> str:
                     pass
     return None
 
-
 def interactive_browser_login():
     """Launch interactive browser window for logging in."""
-    print("\n🌐 Launching interactive login window...")
-    print("👉 Please log in to HoYoLAB in the window that appears.")
-    print("👉 (Google, Apple, or Email + Password login are all supported).\n")
+    print(t("launch_login_window"))
+    print(t("login_instructions_1"))
+    print(t("login_instructions_2"))
 
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        print("📦 Installing Playwright automation engine...")
+        print(t("installing_playwright"))
         cmd = [sys.executable, "-m", "pip", "install", "playwright"]
         if OS_NAME != "Windows":
             cmd.append("--break-system-packages")
@@ -454,7 +726,7 @@ def interactive_browser_login():
         page = context.new_page()
 
         page.goto("https://act.hoyolab.com/ys/event/signin-sea-v3/index.html?act_id=e202102251931481")
-        print("⏳ Waiting for you to log in...")
+        print(t("waiting_user_login"))
 
         captured_cookie = None
         start_time = time.time()
@@ -467,7 +739,7 @@ def interactive_browser_login():
 
             if ltoken and ltuid:
                 captured_cookie = f"ltuid_v2={ltuid}; ltoken_v2={ltoken};"
-                print(f"\n🎉 Login detected for Account ID: {ltuid}!")
+                print(t("login_detected", uid=ltuid))
                 break
             time.sleep(2)
 
@@ -476,9 +748,8 @@ def interactive_browser_login():
             save_cookie_to_env(captured_cookie)
             return captured_cookie
         else:
-            print("❌ Login timed out or cancelled.")
+            print(t("login_timeout"))
             return None
-
 
 # ==============================================================================
 # Cross-Platform Auto Check-In Scheduler (Windows / macOS / Linux)
@@ -492,24 +763,23 @@ def get_scheduler_status():
         if matched:
             res = subprocess.run(["launchctl", "list"], capture_output=True, text=True)
             if "hoyolab" in res.stdout or "genshin" in res.stdout:
-                return True, "macOS LaunchAgent (Active)"
-            return True, "macOS LaunchAgent (Loaded)"
-        return False, "Not Configured"
+                return True, f"macOS LaunchAgent ({t('status_active')})"
+            return True, f"macOS LaunchAgent ({t('status_loaded')})"
+        return False, t("status_not_configured")
 
     elif OS_NAME == "Windows":
         res = subprocess.run(["schtasks", "/Query", "/TN", "HoYoLAB_Daily_Checkin"], capture_output=True, text=True)
         if res.returncode == 0:
-            return True, "Windows Task Scheduler (Active)"
-        return False, "Not Configured"
+            return True, f"Windows Task Scheduler ({t('status_active')})"
+        return False, t("status_not_configured")
 
     elif OS_NAME == "Linux":
         res = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
         if "genshin-checkin" in res.stdout or "hoyolab-checkin" in res.stdout:
-            return True, "Linux Crontab (Active)"
-        return False, "Not Configured"
+            return True, f"Linux Crontab ({t('status_active')})"
+        return False, t("status_not_configured")
 
-    return False, "Unsupported OS"
-
+    return False, t("status_unsupported")
 
 def wait_for_internet(timeout: int = 180, check_interval: int = 3, verbose: bool = False) -> bool:
     """
@@ -527,7 +797,7 @@ def wait_for_internet(timeout: int = 180, check_interval: int = 3, verbose: bool
         pct = min(int((elapsed / timeout) * 100), 99)
         bar = "█" * (pct // 10) + "░" * (10 - (pct // 10))
         if verbose:
-            sys.stdout.write(f"\r[*] Waiting for active internet connection... {spinner[step % len(spinner)]} [{bar}] {elapsed:.1f}s/{timeout}s")
+            sys.stdout.write(f"\r[*] {t('wait_internet')}... {spinner[step % len(spinner)]} [{bar}] {elapsed:.1f}s/{timeout}s")
             sys.stdout.flush()
             step += 1
 
@@ -538,7 +808,7 @@ def wait_for_internet(timeout: int = 180, check_interval: int = 3, verbose: bool
             with urllib.request.urlopen(req, timeout=3) as resp:
                 if resp.status in (200, 204, 301, 302):
                     if verbose:
-                        sys.stdout.write(f"\r{' ' * 75}\r[✓] Internet connection is active! ({elapsed:.1f}s)\n")
+                        sys.stdout.write(f"\r{' ' * 75}\r[✓] {t('internet_active', elapsed=elapsed)}\n")
                         sys.stdout.flush()
                     return True
         except Exception:
@@ -546,10 +816,9 @@ def wait_for_internet(timeout: int = 180, check_interval: int = 3, verbose: bool
         time.sleep(check_interval)
 
     if verbose:
-        sys.stdout.write(f"\r{' ' * 75}\r[!] Failed to connect to internet after {timeout} seconds.\n")
+        sys.stdout.write(f"\r{' ' * 75}\r[!] {t('internet_failed', timeout=timeout)}\n")
         sys.stdout.flush()
     return False
-
 
 def install_scheduler():
     """Install daily background check-in task at 08:00 AM with hourly catch-ups."""
@@ -561,7 +830,6 @@ def install_scheduler():
         plist_path.parent.mkdir(parents=True, exist_ok=True)
         log_path = Path.home() / ".hoyolab-checkin/checkin.log"
 
-        # Build StartCalendarInterval array: 08:00 + hourly catch-ups until 23:00
         intervals = []
         for h in range(8, 24):
             intervals.append(f"""        <dict>
@@ -600,8 +868,7 @@ def install_scheduler():
 
         subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True)
         subprocess.run(["launchctl", "load", str(plist_path)], check=True)
-        print("✅ Daily auto check-in registered at 08:00 AM via macOS LaunchAgent!")
-        print("ℹ️ Catches up automatically whenever MacBook wakes up during the day.")
+        print(t("scheduler_macos_installed"))
         return True
 
     elif OS_NAME == "Windows":
@@ -615,7 +882,7 @@ def install_scheduler():
         ]
         res = subprocess.run(cmd, capture_output=True, text=True)
         if res.returncode == 0:
-            print("✅ Daily auto check-in registered at 08:00 AM in Windows Task Scheduler!")
+            print(t("scheduler_win_installed"))
             return True
         else:
             print(f"❌ Failed to create Windows task: {res.stderr}")
@@ -630,11 +897,10 @@ def install_scheduler():
 
         p = subprocess.Popen(["crontab", "-"], stdin=subprocess.PIPE, text=True)
         p.communicate(input=new_cron)
-        print("✅ Daily auto check-in registered at 08:00 AM in Linux Crontab!")
+        print(t("scheduler_linux_installed"))
         return True
 
     return False
-
 
 def remove_scheduler():
     """Remove background daily task."""
@@ -643,12 +909,12 @@ def remove_scheduler():
         if plist_path.exists():
             subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True)
             plist_path.unlink()
-        print("🗑️ Removed macOS LaunchAgent schedule.")
+        print(t("scheduler_macos_removed"))
         return True
 
     elif OS_NAME == "Windows":
         res = subprocess.run(["schtasks", "/Delete", "/TN", "HoYoLAB_Daily_Checkin", "/F"], capture_output=True, text=True)
-        print("🗑️ Removed Windows Task Scheduler entry.")
+        print(t("scheduler_win_removed"))
         return True
 
     elif OS_NAME == "Linux":
@@ -658,11 +924,10 @@ def remove_scheduler():
             new_cron = "\n".join(filtered) + "\n"
             p = subprocess.Popen(["crontab", "-"], stdin=subprocess.PIPE, text=True)
             p.communicate(input=new_cron)
-        print("🗑️ Removed Linux Crontab schedule.")
+        print(t("scheduler_linux_removed"))
         return True
 
     return False
-
 
 # ==============================================================================
 # API Requests & Check-in Logic
@@ -688,7 +953,6 @@ def request_json(url: str, method: str = "GET", headers: dict = None, body: dict
     except Exception as e:
         return {"retcode": -999, "message": str(e)}
 
-
 def fetch_awards(game_key: str):
     """Fetch monthly awards catalog for the game."""
     if game_key in AWARDS_CACHE:
@@ -705,37 +969,36 @@ def fetch_awards(game_key: str):
         return AWARDS_CACHE[game_key]
     return []
 
-
 def check_in_game(game_key: str, cookie: str, dry_run: bool = False, verbose: bool = True) -> dict:
     """Execute status check and daily sign-in."""
     cfg = GAMES[game_key]
     headers = {"Referer": cfg["referer"], "Cookie": cookie}
 
     if verbose:
-        print(f"\n{cfg['emoji']} Checking {cfg['name']}...")
+        print(f"\n{cfg['emoji']} {t('checkin_start', name=cfg['name'])}")
 
     # Community Check-in logic
     if cfg.get("is_community"):
         if dry_run:
-            msg = "Ready to attend HoYoLAB Community."
+            msg = t("community_ready")
             if verbose:
                 print(f"  ℹ️  [Dry Run] {msg}")
             return {"game": cfg["name"], "success": True, "status": "DRY_RUN", "message": msg}
         sign_res = request_json(cfg["sign_url"], method="POST", headers=headers, body={})
         code = sign_res.get("retcode", -1)
         if code == 0:
-            msg = "HoYoLAB Community attended successfully!"
+            msg = t("community_success")
             if verbose:
                 print(f"  🎉 {msg}")
             return {"game": cfg["name"], "success": True, "status": "SUCCESS", "message": msg}
         elif code in (-5003, 1008):
-            msg = "Already attended HoYoLAB Community today."
+            msg = t("community_already")
             if verbose:
                 print(f"  ✅ {msg}")
             return {"game": cfg["name"], "success": True, "status": "ALREADY_CHECKED_IN", "message": msg}
         else:
             err = sign_res.get("message", "Unknown error")
-            msg = f"Attendance failed: {err}"
+            msg = t("community_failed", err=err)
             if verbose:
                 print(f"  ❌ {msg}")
             return {"game": cfg["name"], "success": False, "status": "FAILED", "message": msg}
@@ -749,7 +1012,7 @@ def check_in_game(game_key: str, cookie: str, dry_run: bool = False, verbose: bo
     retcode = info_res.get("retcode")
 
     if retcode == -100:
-        msg = "Cookie is invalid or expired."
+        msg = t("auth_expired")
         if verbose:
             print(f"  ❌ {msg}")
         return {"game": cfg["name"], "success": False, "status": "AUTH_ERROR", "message": msg}
@@ -757,7 +1020,7 @@ def check_in_game(game_key: str, cookie: str, dry_run: bool = False, verbose: bo
     if retcode != 0:
         err = info_res.get("message", "Unknown error")
         if verbose:
-            print(f"  ❌ Error (code {retcode}): {err}")
+            print(f"  ❌ {t('checkin_err', code=retcode, err=err)}")
         return {"game": cfg["name"], "success": False, "status": "ERROR", "message": err}
 
     data = info_res.get("data", {})
@@ -772,9 +1035,9 @@ def check_in_game(game_key: str, cookie: str, dry_run: bool = False, verbose: bo
         if awards and 0 <= (total_days - 1) < len(awards):
             cur = awards[total_days - 1]
             award_text = f" -> {cur.get('name')} x{cur.get('cnt')}"
-        msg = f"Already checked in today! (Day {total_days}{award_text})"
+        msg = t("already_checked_in", day=total_days, award=award_text)
         if verbose:
-            print(f"  📅 Streak: {total_days} day(s) this month (Missed: {missed_days})")
+            print(f"  {t('streak_status', days=total_days, missed=missed_days)}")
             print(f"  ✅ {msg}")
         return {
             "game": cfg["name"],
@@ -785,9 +1048,9 @@ def check_in_game(game_key: str, cookie: str, dry_run: bool = False, verbose: bo
         }
 
     if dry_run:
-        msg = f"Not checked in yet today. Ready to claim Day {total_days + 1}."
+        msg = t("dry_run_ready", day=total_days + 1)
         if verbose:
-            print(f"  📅 Current streak: {total_days} day(s)")
+            print(f"  {t('dry_run_streak', days=total_days)}")
             print(f"  ℹ️  [Dry Run] {msg}")
         return {"game": cfg["name"], "success": True, "status": "DRY_RUN", "message": msg}
 
@@ -802,23 +1065,22 @@ def check_in_game(game_key: str, cookie: str, dry_run: bool = False, verbose: bo
         if awards and 0 <= (new_day - 1) < len(awards):
             aw = awards[new_day - 1]
             award_text = f" — Claimed: {aw.get('name')} x{aw.get('cnt')}"
-        msg = f"Check-in successful! Total days: {new_day}{award_text}"
+        msg = t("checkin_success", days=new_day, award=award_text)
         if verbose:
             print(f"  🎉 {msg}")
         return {"game": cfg["name"], "success": True, "status": "SUCCESS", "days": new_day, "message": msg}
 
     if sign_code == -5003:
-        msg = f"Already checked in today (Day {total_days})."
+        msg = t("already_checked_in", day=total_days, award="")
         if verbose:
             print(f"  ✅ {msg}")
         return {"game": cfg["name"], "success": True, "status": "ALREADY_CHECKED_IN", "days": total_days, "message": msg}
 
     err_msg = sign_res.get("message", "Unknown failure")
-    msg = f"Check-in failed (code {sign_code}): {err_msg}"
+    msg = t("checkin_failed", code=sign_code, err=err_msg)
     if verbose:
         print(f"  ❌ {msg}")
     return {"game": cfg["name"], "success": False, "status": "FAILED", "message": msg}
-
 
 def run_checkin_batch(cookies: list, games: list, dry_run: bool = False, verbose: bool = True) -> list:
     """Run checkin across all accounts and games."""
@@ -832,7 +1094,6 @@ def run_checkin_batch(cookies: list, games: list, dry_run: bool = False, verbose
             if g_idx < len(games) - 1:
                 time.sleep(random.uniform(2.0, 3.5))
     return all_results
-
 
 # ==============================================================================
 # Interactive Terminal Hub (TUI)
@@ -850,7 +1111,6 @@ def check_account_status(cookie: str) -> dict:
             if res.get("status") != "AUTH_ERROR" and not status["valid"]:
                 status["valid"] = True
 
-    # Parse account uid from cookie string if possible
     for item in cookie.split(";"):
         if "=" in item:
             k, v = item.strip().split("=", 1)
@@ -859,7 +1119,6 @@ def check_account_status(cookie: str) -> dict:
                 break
     return status
 
-
 def menu_toggle_games():
     """Interactive toggle menu for active games."""
     while True:
@@ -867,7 +1126,7 @@ def menu_toggle_games():
         enabled = set(cfg.get("enabled_games", ["genshin", "starrail", "zzz", "honkai3rd", "themis", "hoyolab"]))
 
         print("\n" + "-" * 55)
-        print("🎮 Toggle Games for Daily Check-In")
+        print(t("toggle_games_title"))
         print("-" * 55)
         game_keys = list(GAMES.keys())
         for idx, gk in enumerate(game_keys, 1):
@@ -875,53 +1134,52 @@ def menu_toggle_games():
             status_box = "🟢 [ON] " if gk in enabled else "⚪ [OFF]"
             print(f" [{idx}] {status_box} {g['emoji']} {g['name']}")
         print("-" * 55)
-        print("💡 Options:")
-        print(" - Masukkan nomor [1-6] untuk toggle game ON / OFF")
-        print(" - Ketik 'all' untuk aktifkan semua game")
-        print(" - Ketik 'none' untuk nonaktifkan semua game")
-        print(" - Tekan [0] atau ENTER untuk simpan & kembali")
+        print(t("toggle_options_header"))
+        print(t("toggle_opt_1", count=len(game_keys)))
+        print(t("toggle_opt_2"))
+        print(t("toggle_opt_3"))
+        print(t("toggle_opt_4"))
         print("-" * 55)
 
-        val = input("Pilihan: ").strip().lower()
+        val = input(t("prompt_choice")).strip().lower()
         if val in ("0", ""):
             break
         elif val == "all":
             cfg["enabled_games"] = list(GAMES.keys())
             save_hoyo_config(cfg)
-            print("✅ Semua game diaktifkan!")
+            print(t("all_games_enabled"))
         elif val == "none":
             cfg["enabled_games"] = []
             save_hoyo_config(cfg)
-            print("⚪ Semua game dinonaktifkan!")
+            print(t("all_games_disabled"))
         elif val.isdigit() and 1 <= int(val) <= len(game_keys):
             target_key = game_keys[int(val) - 1]
             if target_key in enabled:
                 enabled.remove(target_key)
-                print(f"⚪ {GAMES[target_key]['name']} DINONAKTIFKAN.")
+                print(t("game_disabled", name=GAMES[target_key]['name']))
             else:
                 enabled.add(target_key)
-                print(f"✅ {GAMES[target_key]['name']} DIAKTIFKAN!")
+                print(t("game_enabled", name=GAMES[target_key]['name']))
             cfg["enabled_games"] = [gk for gk in game_keys if gk in enabled]
             save_hoyo_config(cfg)
         else:
-            print("Input tidak valid.")
-
+            print(t("invalid_input"))
 
 def menu_manage_scheduler():
     """Interactive submenu to install or remove auto check-in."""
     while True:
         is_active, desc = get_scheduler_status()
         print("\n" + "-" * 55)
-        print(f"⏰ Daily Auto Check-In Manager [{OS_NAME}]")
+        print(t("sched_menu_title", os=OS_NAME))
         print("-" * 55)
-        print(f"Status: {'🟢' if is_active else '⚪'} {desc}")
+        print(t("sched_status", icon='🟢' if is_active else '⚪', desc=desc))
         print("\nOptions:")
-        print(" [1] ⏰ Enable / Install Daily Auto Check-In (Runs at 08:00 AM)")
-        print(" [2] 🗑️  Disable / Remove Auto Check-In")
-        print(" [0] 🔙 Back to Main Menu")
+        print(t("sched_opt_install"))
+        print(t("sched_opt_remove"))
+        print(t("sched_opt_back"))
         print("-" * 55)
 
-        choice = input("Select an option [0-2]: ").strip()
+        choice = input(t("sched_prompt")).strip()
         if choice == "1":
             install_scheduler()
         elif choice == "2":
@@ -929,53 +1187,78 @@ def menu_manage_scheduler():
         elif choice == "0":
             break
         else:
-            print("Invalid selection.")
-
+            print(t("invalid_input"))
 
 def menu_login_options():
     """Interactive submenu for login."""
     print("\n" + "-" * 55)
-    print("🔑 Login to HoYoLAB")
+    print(t("login_menu_title"))
     print("-" * 55)
-    print(" [1] ✨ Auto-Import from Browser (Zen / Firefox) [Instant]")
-    print(" [2] 🌐 Open Browser Window (Google / Apple / Email Login)")
-    print(" [3] ⌨️  Enter Cookie Manually")
-    print(" [0] 🔙 Cancel")
+    print(t("login_opt_auto"))
+    print(t("login_opt_browser"))
+    print(t("login_opt_manual"))
+    print(t("login_opt_cancel"))
     print("-" * 55)
 
-    choice = input("Select option [0-3]: ").strip()
+    choice = input(t("login_prompt")).strip()
     if choice == "1":
         cookie = auto_import_from_browser(save=True)
         if cookie:
-            print("\n✅ Successfully imported and saved login credentials!")
+            print(t("login_auto_success"))
             return cookie
         else:
-            print("[-] No active browser session found. Try option 2.")
+            print(t("login_auto_none"))
     elif choice == "2":
         return interactive_browser_login()
     elif choice == "3":
-        manual = input("\nPaste your cookie string (ltoken_v2=...; ltuid_v2=...): ").strip()
+        manual = input(t("paste_cookie")).strip()
         if manual:
             save_cookie_to_env(manual)
-            print("✅ Cookie saved.")
+            print(t("cookie_saved_success"))
             return manual
     return None
 
+def menu_language():
+    """Interactive menu to select language (EN or ID)."""
+    cfg = load_hoyo_config()
+    current = cfg.get("language", "en")
+    print("\n" + "-" * 55)
+    print(t("lang_menu_title"))
+    print("-" * 55)
+    print(f"{t('lang_opt_en')}{'  👈' if current == 'en' else ''}")
+    print(f"{t('lang_opt_id')}{'  👈' if current == 'id' else ''}")
+    print(t("lang_opt_back"))
+    print("-" * 55)
+
+    choice = input(t("lang_prompt")).strip()
+    if choice == "1":
+        cfg["language"] = "en"
+        save_hoyo_config(cfg)
+        set_language("en")
+        print(t("lang_saved", lang="English"))
+    elif choice == "2":
+        cfg["language"] = "id"
+        save_hoyo_config(cfg)
+        set_language("id")
+        print(t("lang_saved", lang="Bahasa Indonesia"))
 
 def interactive_hub():
     """Main interactive hub when running without arguments."""
     while True:
+        cfg = load_hoyo_config()
+        set_language(cfg.get("language", "en"))
+
         cookies, _ = get_cookies_from_env_or_config()
         cookie = cookies[0] if cookies else None
 
         print("\n" + "=" * 58)
-        print("🎮  HoYoLAB Easy Check-In Hub (All Games)")
+        print(t("hub_title"))
         print("=" * 58)
 
         account_info = None
         if cookie:
             account_info, _ = run_with_progress(
-                "Memeriksa status sesi & hadiah HoYoLAB",
+                t("checking_session_progress"),
                 lambda: check_account_status(cookie),
                 timeout=6.0
             )
@@ -983,45 +1266,48 @@ def interactive_hub():
                 account_info = {"valid": False, "uid": "Unknown", "games": {}}
 
             if account_info["valid"]:
-                print(f"👤 Account ID:    {account_info['uid']}")
-                print("🔑 Token Status:  🟢 VALID (Active)")
-                print("📅 Today's Status:")
+                print(t("hub_account_logged", uid=account_info['uid']))
+                print(t("hub_token_valid"))
+                print(t("hub_today_status"))
                 for gk, gres in account_info["games"].items():
                     name = GAMES[gk]["name"]
                     emoji = GAMES[gk]["emoji"]
                     if gres.get("status") == "ALREADY_CHECKED_IN":
-                        print(f"   {emoji} {name:<21}: ✅ Checked In (Day {gres.get('days', 0)})")
+                        badge = t("checked_in_badge", day=gres.get('days', 0))
+                        print(f"   {emoji} {name:<21}: ✅ {badge}")
                     elif gres.get("status") == "DRY_RUN":
-                        print(f"   {emoji} {name:<21}: 🟡 Ready to Claim!")
+                        print(f"   {emoji} {name:<21}: 🟡 {t('ready_to_claim_badge')}")
                     else:
-                        print(f"   {emoji} {name:<21}: ⚪ {gres.get('message', 'Ready')}")
+                        print(f"   {emoji} {name:<21}: ⚪ {gres.get('message', t('ready_badge'))}")
             else:
-                print(f"👤 Account ID:    {account_info['uid']}")
-                print("🔑 Token Status:  🔴 EXPIRED or INVALID")
+                print(t("hub_account_logged", uid=account_info['uid']))
+                print(t("hub_token_expired"))
         else:
-            print("👤 Account:       ⚪ Not Logged In")
-            print("🔑 Token Status:  ⚪ No Credentials Found")
+            print(t("hub_account_not_logged"))
+            print(t("hub_no_credentials"))
 
         is_sched, sched_desc = get_scheduler_status()
-        print(f"⏰ Auto Check-in:  {'🟢' if is_sched else '⚪'} {sched_desc}")
+        print(t("hub_auto_checkin", icon='🟢' if is_sched else '⚪', desc=sched_desc))
         print("=" * 58)
 
         # Dynamic Menu Options
         if not cookie or (account_info and not account_info["valid"]):
             print("╭" + "─" * 56 + "╮")
-            print("│  ⚠️  STATUS AKUN: BELUM LOGIN / SESI HOYOLAB KOSONG     │")
-            print("│  Check-in harian tidak dapat berjalan tanpa akun!      │")
-            print("│  👉 Pilih opsi [1] di bawah untuk login / impor sesi!  │")
+            print(f"│  {t('hub_warning_title'):<52} │")
+            print(f"│  {t('hub_warning_desc1'):<52} │")
+            print(f"│  {t('hub_warning_desc2'):<52} │")
             print("╰" + "─" * 56 + "╯\n")
 
-            print(" [1] 🔑 [WAJIB] LOGIN SEKARANG (Auto-import Zen/Firefox / Browser)")
-            print(" [2] ⏰ Manage Auto Check-In Schedule")
-            print(" [3] 🎮 Toggle Active Games")
-            print(" [4] 🔄 Check for Updates")
-            print(" [0] 🚪 Exit")
+            print(t("hub_no_login_opt_1"))
+            print(t("hub_no_login_opt_2"))
+            print(t("hub_no_login_opt_3"))
+            print(t("hub_no_login_opt_4"))
+            lang_label = "English" if CURRENT_LANG == "en" else "Bahasa Indonesia"
+            print(f" [5] 🌐 Language / Bahasa (Current: {lang_label})")
+            print(t("hub_no_login_opt_0"))
             print("=" * 58)
 
-            choice = input("Select an option [0-4]: ").strip()
+            choice = input(t("hub_no_login_prompt")).strip()
             if choice == "1":
                 menu_login_options()
             elif choice == "2":
@@ -1030,30 +1316,33 @@ def interactive_hub():
                 menu_toggle_games()
             elif choice == "4":
                 check_for_updates(prompt_if_latest=True)
+            elif choice == "5":
+                menu_language()
             elif choice == "0":
-                print("Goodbye! 👋")
+                print(t("goodbye"))
                 sys.exit(0)
         else:
-            cfg = load_hoyo_config()
             enabled_games = cfg.get("enabled_games", ["genshin", "starrail", "zzz", "honkai3rd", "themis", "hoyolab"])
             enabled_str = f"{len(enabled_games)}/{len(GAMES)} Active"
 
-            print(" [1] 🚀 Check-in Now (Claim Today's Rewards)")
-            print(" [2] 🔍 View Streak & Rewards Catalog (Dry Run)")
-            print(f" [3] 🎮 Toggle Active Games ({enabled_str})")
-            print(" [4] ⏰ Manage Daily Auto Check-In (Windows / Mac / Linux)")
-            print(" [5] 🔄 Re-login / Switch Account")
-            print(" [6] 🔄 Check for Updates")
-            print(" [0] 🚪 Exit")
+            print(t("hub_logged_opt_1"))
+            print(t("hub_logged_opt_2"))
+            print(t("hub_logged_opt_3", games=enabled_str))
+            print(t("hub_logged_opt_4", os=OS_NAME))
+            print(t("hub_logged_opt_5"))
+            print(t("hub_logged_opt_6"))
+            lang_label = "English" if CURRENT_LANG == "en" else "Bahasa Indonesia"
+            print(f" [7] 🌐 Language / Bahasa (Current: {lang_label})")
+            print(t("hub_logged_opt_0"))
             print("=" * 58)
 
-            choice = input("Select an option [0-6]: ").strip()
+            choice = input(t("hub_login_prompt")).strip()
             if choice == "1":
                 run_checkin_batch([cookie], enabled_games, dry_run=False, verbose=True)
-                input("\nPress Enter to return to menu...")
+                input(t("press_enter_return"))
             elif choice == "2":
                 run_checkin_batch([cookie], enabled_games, dry_run=True, verbose=True)
-                input("\nPress Enter to return to menu...")
+                input(t("press_enter_return"))
             elif choice == "3":
                 menu_toggle_games()
             elif choice == "4":
@@ -1062,10 +1351,11 @@ def interactive_hub():
                 menu_login_options()
             elif choice == "6":
                 check_for_updates(prompt_if_latest=True)
+            elif choice == "7":
+                menu_language()
             elif choice == "0":
-                print("Goodbye! 👋")
+                print(t("goodbye"))
                 sys.exit(0)
-
 
 # ==============================================================================
 # CLI Entry Point
@@ -1084,8 +1374,15 @@ def main():
     parser.add_argument("--login-browser", action="store_true", help="Open browser GUI login")
     parser.add_argument("--install-schedule", action="store_true", help="Install auto daily check-in")
     parser.add_argument("--remove-schedule", action="store_true", help="Remove auto daily check-in")
+    parser.add_argument("--lang", "--language", choices=["en", "id"], help="Set UI language (en/id)")
 
     args = parser.parse_args()
+
+    cfg = load_hoyo_config()
+    if args.lang:
+        set_language(args.lang)
+    else:
+        set_language(cfg.get("language", "en"))
 
     # Direct CLI actions
     if args.install_schedule:
@@ -1125,19 +1422,17 @@ def main():
         if imported:
             cookies = [imported]
         else:
-            print("❌ Error: No HoYoLAB credentials found! Run 'hoyolab-checkin' to log in.")
+            print(t("cli_no_cred"))
             sys.exit(1)
 
-    cfg = load_hoyo_config()
     games_to_run = cfg.get("enabled_games", ["genshin", "starrail", "zzz", "honkai3rd", "themis", "hoyolab"]) if args.game == "all" else [args.game]
 
     verbose = not (args.silent or args.cron)
     if verbose:
-        print(f"🚀 HoYoLAB Check-In [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]")
+        print(t("cli_starting", time=datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
     else:
-        # Wait for active internet connection upon wake up
         if not wait_for_internet(timeout=180, verbose=False):
-            print(f"❌ [HoYoLAB] Internet connection not available after 180s wake-up wait.")
+            print(t("internet_wake_failed", timeout=180))
             sys.exit(1)
 
     max_retries = 3 if (args.silent or args.cron) else 1
@@ -1151,7 +1446,6 @@ def main():
         wait_for_internet(timeout=60, verbose=False)
 
     sys.exit(0 if success else 1)
-
 
 if __name__ == "__main__":
     try:
